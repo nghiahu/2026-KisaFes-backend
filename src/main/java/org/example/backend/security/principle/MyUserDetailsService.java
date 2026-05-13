@@ -23,7 +23,7 @@ public class MyUserDetailsService implements UserDetailsService {
     private final IProjectMemberRepository projectMemberRepository;
 
     @Override
-    @Transactional(readOnly = true) // Đảm bảo hiệu suất truy vấn MongoDB
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String identifier) throws UsernameNotFoundException {
         // 1. Tìm user bằng username hoặc email (Đã khớp với Entity User của bạn)
         User user = userRepository.findByUserNameOrEmail(identifier, identifier)

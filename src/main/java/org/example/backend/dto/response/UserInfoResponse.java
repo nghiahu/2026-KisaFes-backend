@@ -14,6 +14,8 @@ import java.util.Set;
 public class UserInfoResponse {
     private String id;
     private String username;
+    private String fullname;
     private String email;
+    private String avatarUrl;
     private Set<String> roles;
 }

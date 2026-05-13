@@ -1,9 +1,11 @@
 package org.example.backend.service;
 
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.example.backend.security.jwt.JwtProvider;
+import org.example.backend.security.principle.CustomOAuth2User;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -17,15 +19,27 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final JwtProvider jwtProvider;
 
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
-                                        Authentication authentication) throws IOException {
+    public void onAuthenticationSuccess(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Authentication authentication
+    ) throws IOException, ServletException {
 
-        // Tạo JWT từ thông tin người dùng vừa đăng nhập
-        String token = jwtProvider.generateAccessToken(authentication);
+        CustomOAuth2User oAuth2User =
+                (CustomOAuth2User) authentication.getPrincipal();
+        String temporaryToken =
+                jwtProvider.generateAccessToken(authentication);
 
-        // Chuyển hướng về Frontend kèm theo token
-        String targetUrl = "http://localhost:5173/oauth2/redirect?token=" + token;
+        String targetUrl =
+                "http://localhost:5173/oauth2/redirect"
+                        + "?token=" + temporaryToken;
 
-        getRedirectStrategy().sendRedirect(request, response, targetUrl);
+        clearAuthenticationAttributes(request);
+
+        getRedirectStrategy().sendRedirect(
+                request,
+                response,
+                targetUrl
+        );
     }
 }

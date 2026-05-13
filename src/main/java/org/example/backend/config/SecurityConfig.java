@@ -1,19 +1,16 @@
 package org.example.backend.config;
 
-import lombok.RequiredArgsConstructor;
-import org.example.backend.common.util.AppConfig;
+import java.util.List;
+
 import org.example.backend.security.exception.AccessDenied;
 import org.example.backend.security.exception.JwtEntryPoint;
 import org.example.backend.security.jwt.JwtTokenFilter;
 import org.example.backend.security.principle.MyUserDetailsService;
 import org.example.backend.service.CustomOAuth2UserService;
 import org.example.backend.service.OAuth2SuccessHandler;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.AuthenticationProvider;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -24,7 +21,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 
-import java.util.List;
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
@@ -58,7 +55,7 @@ public class SecurityConfig {
                         // Mọi thao tác khác yêu cầu đăng nhập
                         .anyRequest().authenticated()
                 )
-                // Cấu hình cho đăng nhập bằng Google/GitHub
+
                 .oauth2Login(oauth2 -> oauth2
                         .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                         .successHandler(oauth2SuccessHandler)

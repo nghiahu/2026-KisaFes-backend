@@ -27,26 +27,43 @@ public class OtpService {
         redisService.save(
                 "otp:" + email,
                 otp,
-                5 * 60 * 1000 // 5 phút
+                5 * 60 * 1000
         );
         mailService.sendOtpMail(email, otp);
     }
 
+    public void sendResetPasswordMail(String email) {
+        String otp = generateOtp();
+        redisService.save(
+                "otpResetPass:" + email,
+                otp,
+                5 * 60 * 1000
+        );
+        mailService.sendOtpResetPass(email, otp);
+    }
+
     public String verifyOtp(String email, String otp) {
         String key = "otp:" + email;
-
         String savedOtp = redisService.get(key);
-
         if (savedOtp == null) {
             throw new CustomBusinessException(ErrorCode.OTP_EXPIRED);
         }
-
         if (!savedOtp.equals(otp)) {
             throw new CustomBusinessException(ErrorCode.INVALID_OTP);
         }
-
         redisService.delete(key);
-
         return jwtProvider.generateOtpVerificationToken(email);
+    }
+    public String verifyResetPassword(String email, String otp) {
+        String key = "otpResetPass:" + email;
+        String savedOtp = redisService.get(key);
+        if (savedOtp == null) {
+            throw new CustomBusinessException(ErrorCode.OTP_EXPIRED);
+        }
+        if (!savedOtp.equals(otp)) {
+            throw new CustomBusinessException(ErrorCode.INVALID_OTP);
+        }
+        redisService.delete(key);
+        return jwtProvider.generateResetPasswordVerificationToken(email);
     }
 }

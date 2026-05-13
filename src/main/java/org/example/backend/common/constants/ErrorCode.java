@@ -13,8 +13,10 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND("Không tìm thấy dữ liệu", HttpStatus.NOT_FOUND),
 
     // AUTH
+    INVALID_CREDENTIALS("Sai tài khoản hoặc mật khẩu", HttpStatus.UNAUTHORIZED),
     UNAUTHORIZED("Phiên đăng nhập hết hạn hoặc không hợp lệ", HttpStatus.UNAUTHORIZED),
     FORBIDDEN("Bạn không có quyền thực hiện hành động này", HttpStatus.FORBIDDEN),
+    ACCOUNT_DISABLED("Tài khoản đã bị khóa", HttpStatus.FORBIDDEN),
 
     // VALIDATION
     VALIDATION_ERROR("Dữ liệu không hợp lệ", HttpStatus.BAD_REQUEST),
@@ -33,8 +35,8 @@ public enum ErrorCode {
     USERNAME_ALREADY_EXISTS("Tên người dùng đã tôn tại", HttpStatus.CONFLICT),
 
     // SYSTEM
+    INVALID_REFRESH_TOKEN("Refresh Token không hợp lệ", HttpStatus.UNAUTHORIZED),
     INTERNAL_ERROR("Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
-
 
 
     private final String message;

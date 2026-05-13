@@ -193,7 +193,7 @@ public class JwtProvider {
 
         claims.put("purpose", "REGISTER_VERIFY");
 
-        long OTP_VERIFY_EXPIRED = 5 * 60 * 1000; // 5 phút
+        long OTP_VERIFY_EXPIRED = 5 * 60 * 1000;
 
         return buildToken(
                 claims,
@@ -215,6 +215,31 @@ public class JwtProvider {
             );
             return "otp_verify".equals(type)
                     && "REGISTER_VERIFY".equals(purpose)
+                    && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public String generateResetPasswordVerificationToken(String email) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("purpose", "RESET_PASSWORD_VERIFY");
+        long RESET_VERIFY_EXPIRED = 5 * 60 * 1000;
+        return buildToken(claims, email, RESET_VERIFY_EXPIRED, "otp_verify");
+    }
+
+    public boolean isResetPasswordVerificationToken(String token) {
+        try {
+            String type = extractClaim(
+                    token,
+                    claims -> claims.get("type", String.class)
+            );
+            String purpose = extractClaim(
+                    token,
+                    claims -> claims.get("purpose", String.class)
+            );
+            return "otp_verify".equals(type)
+                    && "RESET_PASSWORD_VERIFY".equals(purpose)
                     && !isTokenExpired(token);
         } catch (Exception e) {
             return false;

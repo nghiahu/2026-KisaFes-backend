@@ -34,4 +34,7 @@ public class User extends BaseEntity {
 
     @Builder.Default
     private boolean active = true;
+
+    @Builder.Default
+    private boolean isPublic = false;
 }

@@ -1,0 +1,25 @@
+package org.example.backend.dto.request;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class UpdateProfileRequest {
+    @NotBlank(message = "Họ và tên không được để trống")
+    private String fullName;
+    
+    @NotBlank(message = "Tên người dùng không được để trống")
+    private String userName;
+    
+    private String bio;
+    
+    private String avatar;
+    
+    private boolean isPublic;
+}

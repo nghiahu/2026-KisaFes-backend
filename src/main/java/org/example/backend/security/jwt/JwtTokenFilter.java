@@ -1,11 +1,7 @@
 package org.example.backend.security.jwt;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.io.IOException;
+
 import org.example.backend.security.principle.MyUserDetailsService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,7 +11,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -43,12 +44,6 @@ public class JwtTokenFilter extends OncePerRequestFilter {
             String token = getTokenFromRequest(request);
 
             if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                // 🔹 validate trước (tránh crash khi extract)
-                if (!jwtProvider.validateToken(token, null)) {
-                    filterChain.doFilter(request, response);
-                    return;
-                }
 
                 String username = jwtProvider.extractUsername(token);
 
@@ -88,6 +83,6 @@ public class JwtTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/auth");
+        return path.startsWith("/api/v1/auth");
     }
 }

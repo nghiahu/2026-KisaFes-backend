@@ -8,6 +8,7 @@ import org.example.backend.entity.Role;
 import org.example.backend.entity.User;
 import org.example.backend.repository.IRoleRepository;
 import org.example.backend.repository.IUserRepository;
+import org.example.backend.security.principle.CustomOAuth2User;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -28,7 +29,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         OAuth2User oAuth2User = super.loadUser(userRequest);
 
-        // Xác định login từ Google hay GitHub
         String clientRegistrationId = userRequest.getClientRegistration().getRegistrationId();
 
         return processOAuth2User(oAuth2User, clientRegistrationId);
@@ -37,31 +37,39 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private OAuth2User processOAuth2User(OAuth2User oAuth2User, String provider) {
         Map<String, Object> attributes = oAuth2User.getAttributes();
         String email = (String) attributes.get("email");
+
+        if ((email == null || email.isBlank()) && "github".equals(provider)) {
+            // xử lý gọi API GitHub lấy email
+        }
+
         if (email == null || email.isBlank()) {
-            return oAuth2User;
+            throw new OAuth2AuthenticationException("Email not found from OAuth2 provider");
         }
 
-        // GitHub có thể không trả về email công khai trong attributes chính
-        if (email == null && "github".equals(provider)) {
-            // Logic xử lý lấy email riêng cho GitHub nếu cần
-        }
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    Role userRole = roleRepository.findByName(AppConstants.ROLE_USER)
+                            .orElseThrow(() -> new CustomBusinessException(ErrorCode.ROLE_NOT_FOUND));
 
-        userRepository.findByEmail(email).orElseGet(() -> {
-            Role userRole = roleRepository.findByName(AppConstants.ROLE_USER)
-                    .orElseThrow(() -> new CustomBusinessException(ErrorCode.ROLE_NOT_FOUND));
-            User newUser = new User();
-            newUser.setEmail(email);
-            newUser.setFullName((String) attributes.get("name"));
-            newUser.setAvatar(provider.equals("google")
-                    ? (String) attributes.get("picture")
-                    : (String) attributes.get("avatar_url"));
-            newUser.setUserName(resolveUsernameFromEmail(email));
-            newUser.setRoles(Set.of(userRole));
-            newUser.setActive(true);
-            return userRepository.save(newUser);
-        });
+                    User newUser = new User();
 
-        return oAuth2User;
+                    newUser.setEmail(email);
+                    newUser.setFullName((String) attributes.get("name"));
+
+                    newUser.setAvatar(
+                            provider.equals("google")
+                                    ? (String) attributes.get("picture")
+                                    : (String) attributes.get("avatar_url")
+                    );
+
+                    newUser.setUserName(resolveUsernameFromEmail(email));
+                    newUser.setRoles(Set.of(userRole));
+                    newUser.setActive(true);
+
+                    return userRepository.save(newUser);
+                });
+
+        return new CustomOAuth2User(user, attributes);
     }
 
     private String resolveUsernameFromEmail(String email) {

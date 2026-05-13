@@ -41,6 +41,13 @@ public class GlobalHandleException {
         return buildResponse(ErrorCode.VALIDATION_ERROR, request, errors);
     }
 
+
+    // BAD CREDENTIALS (sai tài khoản hoặc mật khẩu)
+    @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
+    public ResponseEntity<ApiError> handleBadCredentials(HttpServletRequest request) {
+        return buildResponse(ErrorCode.INVALID_CREDENTIALS, request, null);
+    }
+
     // ACCESS DENIED
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiError> handleAccessDenied(HttpServletRequest request) {
