@@ -123,9 +123,10 @@ public class AuthServiceImpl implements IAuthService {
         // sinh token
         String accessToken = jwtProvider.generateAccessToken(authentication);
         String refreshToken = jwtProvider.generateRefreshToken(authentication);
+        String jti = jwtProvider.extractJti(refreshToken);
 
         redisService.save(
-                "refreshToken:" + user.getEmail(),
+                "refreshToken:" + user.getEmail() + ":" + jti,
                 refreshToken, 604800000
         );
         addRefreshTokenCookie(response, refreshToken);
@@ -193,7 +194,8 @@ public class AuthServiceImpl implements IAuthService {
                 )
                 .build();
 
-        redisService.save("refreshToken:" + user.getEmail(), refreshToken, 604800000);
+        String jti = jwtProvider.extractJti(refreshToken);
+        redisService.save("refreshToken:" + user.getEmail() + ":" + jti, refreshToken, 604800000);
         addRefreshTokenCookie(response, refreshToken);
 
         return JwtResponse.builder()
@@ -206,78 +208,69 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     public TokenRefreshResponse refreshToken(String refreshToken, HttpServletResponse response) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new CustomBusinessException(
-                    ErrorCode.INVALID_REFRESH_TOKEN
-            );
+            throw new CustomBusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         if (!jwtProvider.validateRefreshToken(refreshToken)) {
-            throw new CustomBusinessException(
-                    ErrorCode.INVALID_REFRESH_TOKEN
-            );
+            throw new CustomBusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         String identifier = jwtProvider.extractUsername(refreshToken);
         User user = userRepository.findByUserNameOrEmail(identifier, identifier)
-                .orElseThrow(() ->
-                        new CustomBusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (!user.isActive()) {
-            throw new CustomBusinessException(
-                    ErrorCode.ACCOUNT_DISABLED
-            );
+            throw new CustomBusinessException(ErrorCode.ACCOUNT_DISABLED);
         }
 
-        // Kiểm tra token có khớp với token đang lưu trong Redis không (để xử lý vụ logout)
-        Object cachedToken = redisService.get("refreshToken:" + user.getEmail());
+        // Kiểm tra token có khớp với token đang lưu trong Redis không
+        String jti = jwtProvider.extractJti(refreshToken);
+        String cacheKey = "refreshToken:" + user.getEmail() + ":" + jti;
+        String graceKey = "refreshTokenGrace:" + user.getEmail() + ":" + jti;
+        
+        Object cachedToken = redisService.get(cacheKey);
+        boolean isGraceToken = false;
+
         if (cachedToken == null || !cachedToken.toString().equals(refreshToken)) {
-            throw new CustomBusinessException(
-                    ErrorCode.INVALID_REFRESH_TOKEN
-            );
+            // Nếu không khớp, kiểm tra xem có phải là token vừa mới được rotate không (grace period)
+            Object graceToken = redisService.get(graceKey);
+            if (graceToken != null && graceToken.toString().equals(refreshToken)) {
+                isGraceToken = true;
+            } else {
+                throw new CustomBusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+            }
         }
 
-        /*
-         * Create authentication object
-         */
-        UserDetails userDetails =
-                myUserDetailsService.loadUserByUsername(
-                        user.getEmail()
-                );
-
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-
-        /*
-         * Generate new tokens
-         */
-        String newAccessToken =
-                jwtProvider.generateAccessToken(authentication);
-
-        String newRefreshToken =
-                jwtProvider.generateRefreshToken(authentication);
-
-        /*
-         * Rotate refresh token — save to Redis
-         */
-        redisService.save(
-                "refreshToken:" + user.getEmail(),
-                newRefreshToken, 604800000
-        );
-        addRefreshTokenCookie(
-                response,
-                newRefreshToken
+        UserDetails userDetails = myUserDetailsService.loadUserByUsername(user.getEmail());
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities()
         );
 
-        /*
-         * Return access token only
-         */
+        String newAccessToken = jwtProvider.generateAccessToken(authentication);
+        
+        String newRefreshToken = jwtProvider.generateRefreshToken(authentication);
+        String newJti = jwtProvider.extractJti(newRefreshToken);
+
+        // Lưu token cũ vào grace period (30 giây) trước khi ghi đè token mới
+        if (!isGraceToken && cachedToken != null) {
+            redisService.save(graceKey, cachedToken.toString(), 30000); // 30 seconds grace
+        }
+
+        // Với JTI-based rotation, ta có thể chọn: 
+        // 1. Xóa key cũ (JTI cũ) và tạo key mới (JTI mới). -> Tốt nhất cho security.
+        // 2. Ghi đè lên key cũ (nhưng JTI thay đổi nên không ghi đè được).
+        
+        // Ta chọn: Lưu key mới với JTI mới, và xóa key cũ (sau khi đã cho vào grace)
+        redisService.save("refreshToken:" + user.getEmail() + ":" + newJti, newRefreshToken, 604800000);
+        if (!isGraceToken) {
+            // Xóa key cũ hoặc để nó hết hạn? Ta nên xóa để dọn dẹp Redis.
+            // Nhưng nếu xóa ngay thì các parallel request khác sẽ xịt.
+            // Vậy nên ta để key cũ tồn tại thêm 30s nữa (giống grace period).
+            redisService.save(cacheKey, refreshToken, 30000); 
+        }
+
+        addRefreshTokenCookie(response, newRefreshToken);
+
         return TokenRefreshResponse.builder()
                 .accessToken(newAccessToken)
                 .expiresIn(900000)
@@ -330,9 +323,10 @@ public class AuthServiceImpl implements IAuthService {
         if (refreshToken != null && !refreshToken.isBlank()) {
             try {
                 String email = jwtProvider.extractUsername(refreshToken);
-                redisService.delete("refreshToken:" + email);
+                String jti = jwtProvider.extractJti(refreshToken);
+                redisService.delete("refreshToken:" + email + ":" + jti);
+                redisService.delete("refreshTokenGrace:" + email + ":" + jti);
             } catch (Exception ignored) {
-                // Token không hợp lệ thì bỏ qua
             }
         }
 

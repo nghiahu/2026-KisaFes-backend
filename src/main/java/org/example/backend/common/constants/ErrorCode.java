@@ -29,6 +29,9 @@ public enum ErrorCode {
     VERIFY_TOKEN_EXPIRED("Token xác thực đã hết hạn", HttpStatus.UNAUTHORIZED),
     EMAIL_NOT_VERIFIED("Email chưa được xác thực OTP", HttpStatus.FORBIDDEN),
 
+    // CATEGORY
+    RESOURCE_ALREADY_EXISTS("Tài nguyên không có sẵn",  HttpStatus.BAD_REQUEST),
+
     // REGISTER
     EMAIL_ALREADY_EXISTS("Email đã tồn tại", HttpStatus.CONFLICT),
     ROLE_NOT_FOUND("Không xác định được phân quyền của hệ thống", HttpStatus.NOT_FOUND),
@@ -37,6 +40,7 @@ public enum ErrorCode {
     // SYSTEM
     INVALID_REFRESH_TOKEN("Refresh Token không hợp lệ", HttpStatus.UNAUTHORIZED),
     INTERNAL_ERROR("Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);
+
 
 
     private final String message;

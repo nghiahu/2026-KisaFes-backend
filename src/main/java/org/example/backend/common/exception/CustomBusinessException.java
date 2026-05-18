@@ -12,4 +12,9 @@ public class CustomBusinessException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+    public CustomBusinessException(ErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
+
 }

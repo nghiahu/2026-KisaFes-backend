@@ -43,6 +43,10 @@ public class JwtProvider {
         return extractClaim(token, Claims::getExpiration);
     }
 
+    public String extractJti(String token) {
+        return extractClaim(token, claims -> claims.getId());
+    }
+
     /**
      * 3. Hàm generic để trích xuất bất kỳ thông tin nào (Claims)
      */
@@ -118,41 +122,24 @@ public class JwtProvider {
     }
 
     public String generateAccessToken(Authentication authentication) {
-
         Map<String, Object> claims = new HashMap<>();
         Set<String> roles = new LinkedHashSet<>();
         Set<String> permissions = new LinkedHashSet<>();
 
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof MyUserDetails myUserDetails) {
-            User user = myUserDetails.getUser();
-            if (user != null && user.getRoles() != null) {
-                for (Role role : user.getRoles()) {
-                    if (role == null) {
-                        continue;
-                    }
-                    if (role.getName() != null && !role.getName().isBlank()) {
-                        roles.add(role.getName());
-                    }
-                    if (role.getPermissions() != null) {
-                        role.getPermissions().stream()
-                                .filter(permission -> permission != null && !permission.isBlank())
-                                .forEach(permissions::add);
-                    }
-                }
+        authentication.getAuthorities().forEach(authority -> {
+            String auth = authority.getAuthority();
+            if (auth == null) return;
+
+            if (auth.startsWith("ROLE_")) {
+                roles.add(auth.substring(5));
+            } else if (auth.contains("_ROLE_")) {
+                // Đây là Project Role: PROJECT_{id}_ROLE_{name}
+                roles.add(auth);
+            } else {
+                // Đây là Permission (System hoặc Project)
+                permissions.add(auth);
             }
-        } else {
-            authentication.getAuthorities().stream()
-                    .map(GrantedAuthority::getAuthority)
-                    .filter(Objects::nonNull)
-                    .forEach(authority -> {
-                        if (authority.startsWith("ROLE_") && authority.length() > 5) {
-                            roles.add(authority.substring(5));
-                        } else if (!authority.startsWith("PROJECT_")) {
-                            permissions.add(authority);
-                        }
-                    });
-        }
+        });
 
         claims.put("permissions", new ArrayList<>(permissions));
         claims.put("roles", new ArrayList<>(roles));

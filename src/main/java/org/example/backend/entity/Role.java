@@ -17,7 +17,7 @@ public class Role extends BaseEntity {
 
     @Indexed(unique = true)
     private String name;
-    private Set<String> permissions;
+    private Set<SystemPermission> permissions;
 
 
     private boolean isSystemRole = false;

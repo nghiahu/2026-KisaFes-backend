@@ -8,6 +8,10 @@ import java.time.LocalDateTime;
 
 public abstract class BaseController {
 
+    protected <T> ResponseEntity<ResponseWrapper<T>> success(T data) {
+        return success(data, "Success");
+    }
+
     protected <T> ResponseEntity<ResponseWrapper<T>> success(T data, String message) {
         return buildResponse(HttpStatus.OK, message, data);
     }
