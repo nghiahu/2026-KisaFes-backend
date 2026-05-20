@@ -6,23 +6,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.util.List;
-
 @SpringBootTest
-class BackEndApplicationTests {
+class MongoMappingTest {
 
     @Autowired
     private IUserRepository userRepository;
 
     @Test
-    void contextLoads() {
-        System.out.println("=== QUERYING ALL USERS IN DB ===");
-        List<User> users = userRepository.findAll();
-        for (User u : users) {
-            System.out.println("USER_IN_DB: " + u);
-        }
-        System.out.println("=== END QUERYING ALL USERS IN DB ===");
+    void testUserMapping() {
+        User user = userRepository.findByEmail("nghia120425@gmail.com").orElse(null);
+        System.out.println("TEST_USER_MAPPING: " + (user != null ? "SUCCESS" : "NOT FOUND"));
     }
-
 }
-

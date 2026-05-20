@@ -6,7 +6,9 @@ import org.example.backend.common.exception.CustomBusinessException;
 import org.example.backend.dto.request.AddTaskRequest;
 import org.example.backend.dto.response.TaskResponse;
 import org.example.backend.entity.Project;
+import org.example.backend.entity.Resolution;
 import org.example.backend.entity.Task;
+import org.example.backend.entity.TaskType;
 import org.example.backend.entity.User;
 import org.example.backend.repository.IProjectRepository;
 import org.example.backend.repository.ITaskRepository;
@@ -68,7 +70,11 @@ public class TaskServiceImpl implements ITaskService {
         task.setStoryPoints(request.getStoryPoints());
         task.setAssigneeId(request.getAssigneeId() != null ? request.getAssigneeId() : "Unassigned");
         task.setReporterId(currentUserId);
-        task.setType(request.getType() != null ? request.getType() : "task");
+        try {
+            task.setType(request.getType() != null ? TaskType.valueOf(request.getType().toUpperCase()) : TaskType.TASK);
+        } catch (IllegalArgumentException e) {
+            task.setType(TaskType.TASK);
+        }
 
         Task saved = taskRepository.save(task);
         List<User> users = userRepository.findAll();
@@ -103,8 +109,11 @@ public class TaskServiceImpl implements ITaskService {
         res.setStoryPoints(task.getStoryPoints());
         res.setAssigneeId(task.getAssigneeId());
         res.setReporterId(task.getReporterId());
-        res.setType(task.getType() != null ? task.getType() : "task");
+        res.setType(task.getType() != null ? task.getType().name().toLowerCase() : "task");
+        res.setResolution(task.getResolution() != null ? task.getResolution() : Resolution.UNRESOLVED);
+        res.setDueDate(task.getDueDate());
         res.setCreatedAt(task.getCreatedAt());
+        res.setUpdatedAt(task.getUpdatedAt());
 
         if (project.getStatuses() != null) {
             project.getStatuses().stream()

@@ -1,6 +1,7 @@
 package org.example.backend.dto.response;
 
 import lombok.Data;
+import org.example.backend.entity.Resolution;
 import java.time.LocalDateTime;
 
 @Data
@@ -19,6 +20,9 @@ public class TaskResponse {
     private String assigneeName;
     private String reporterId;
     private String reporterName;
-    private String type; // "story" | "task" | "bug"
+    private String type;
+    private Resolution resolution;
+    private LocalDateTime dueDate;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

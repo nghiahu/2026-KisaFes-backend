@@ -164,7 +164,7 @@ public class ProjectServiceImpl implements IProjectService {
             task1.setStoryPoints(5);
             task1.setAssigneeId(ownerId);
             task1.setReporterId(ownerId);
-            task1.setType("story");
+            task1.setType(TaskType.STORY);
             taskRepository.save(task1);
 
             Task task2 = new Task();
@@ -178,7 +178,7 @@ public class ProjectServiceImpl implements IProjectService {
             task2.setStoryPoints(3);
             task2.setAssigneeId(ownerId);
             task2.setReporterId(ownerId);
-            task2.setType("story");
+            task2.setType(TaskType.STORY);
             taskRepository.save(task2);
 
             Task task3 = new Task();
@@ -192,7 +192,7 @@ public class ProjectServiceImpl implements IProjectService {
             task3.setStoryPoints(8);
             task3.setAssigneeId(ownerId);
             task3.setReporterId(ownerId);
-            task3.setType("story");
+            task3.setType(TaskType.STORY);
             taskRepository.save(task3);
 
             Task task4 = new Task();
@@ -206,7 +206,7 @@ public class ProjectServiceImpl implements IProjectService {
             task4.setStoryPoints(2);
             task4.setAssigneeId(ownerId);
             task4.setReporterId(ownerId);
-            task4.setType("task");
+            task4.setType(TaskType.TASK);
             taskRepository.save(task4);
         }
 

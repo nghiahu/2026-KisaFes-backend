@@ -30,7 +30,10 @@ public class Task extends BaseEntity {
 
     private String assigneeId;
     private String reporterId;
-    private String type; // "story" | "task" | "bug"
+    private TaskType type;
+
+    private Resolution resolution;
+    private LocalDateTime dueDate;
 
     private List<Attachment> attachments;
     private List<TaskRelation> relations;
