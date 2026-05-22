@@ -33,12 +33,17 @@ public class ProjectResponse {
     private int openIssuesCount;
     private String deadlineDisplay;
 
+    /** Phương pháp quản lý: SCRUM hoặc KANBAN. */
+    private String methodology;
+
     @Data
     public static class MemberResponse {
         private String id;
         private String name;
         private String avatar;
+        private String roleId;
         private String roleName;
+        private boolean active;
     }
 
     public static ProjectResponse fromEntity(org.example.backend.entity.Project project) {
@@ -52,6 +57,7 @@ public class ProjectResponse {
         response.setFavoriteBy(project.getFavoriteBy());
         response.setCreatedAt(project.getCreatedAt());
         response.setUpdatedAt(project.getUpdatedAt());
+        response.setMethodology(project.getMethodology() != null ? project.getMethodology().name() : "KANBAN");
 
         if (project.getStatuses() != null) {
             response.setStatuses(project.getStatuses().stream()

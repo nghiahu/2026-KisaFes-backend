@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import org.example.backend.entity.Project;
 import java.util.List;
 
 
@@ -28,6 +29,9 @@ public class AddProjectRequest {
 
     @NotBlank(message = "Category is required")
     private String categoryId;
+
+    /** Phương pháp quản lý: SCRUM hoặc KANBAN. Mặc định KANBAN. */
+    private Project.Methodology methodology = Project.Methodology.KANBAN;
 
     @Valid
     private List<ProjectStatusRequest> statuses;

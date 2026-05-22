@@ -64,8 +64,8 @@ public class SecurityConfig {
                 }))
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(url -> url
-                        // Cho phép các endpoint auth và oauth2
-                        .requestMatchers("/api/v1/auth/**", "/oauth2/**").permitAll()
+                        // Cho phép các endpoint auth, oauth2 và upload
+                        .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/api/v1/upload/**").permitAll()
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
                         // Mọi thao tác khác yêu cầu đăng nhập
                         .anyRequest().authenticated()

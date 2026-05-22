@@ -9,4 +9,6 @@ public interface ITaskService {
     List<TaskResponse> getTasksByProjectId(String projectId);
     TaskResponse createTask(AddTaskRequest request);
     TaskResponse updateTaskStatus(String taskId, String statusId);
+    TaskResponse updateTaskAssignee(String taskId, String assigneeId);
+    TaskResponse updateTaskPriority(String taskId, String priority);
 }

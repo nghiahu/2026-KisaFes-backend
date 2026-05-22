@@ -13,6 +13,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Phương pháp quản lý dự án.
+ * SCRUM: Sprint-based, có Backlog, Story Points.
+ * KANBAN: Continuous flow, không có Sprint.
+ */
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Document(collection = "projects")
@@ -23,6 +29,13 @@ public class Project extends BaseEntity {
     private String code;
     private String description;
     private String categoryId;
+
+    /** Phương pháp quản lý: SCRUM hoặc KANBAN. Mặc định KANBAN. */
+    private Methodology methodology = Methodology.KANBAN;
+
+    public enum Methodology {
+        SCRUM, KANBAN
+    }
 
     private List<ProjectStatus> statuses;
     private List<BoardColumn> boardColumns;

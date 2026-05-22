@@ -18,8 +18,10 @@ public class TaskResponse {
     private Integer storyPoints;
     private String assigneeId;
     private String assigneeName;
+    private String assigneeAvatar;
     private String reporterId;
     private String reporterName;
+    private String reporterAvatar;
     private String type;
     private Resolution resolution;
     private LocalDateTime dueDate;

@@ -6,6 +6,7 @@ import org.example.backend.dto.request.UpdateProfileRequest;
 import org.example.backend.dto.response.UserProfileResponse;
 
 public interface IUserService extends BaseService<User, String> {
-    UserProfileResponse getUserProfile(String identifier);
-    UserProfileResponse updateProfile(String identifier, UpdateProfileRequest request);
+    UserProfileResponse getUserProfile(String email);
+    UserProfileResponse updateProfile(String email, UpdateProfileRequest request);
+    java.util.List<org.example.backend.dto.response.UserSearchResponse> searchUsers(String keyword);
 }

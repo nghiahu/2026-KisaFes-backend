@@ -14,4 +14,6 @@ public interface IUserRepository extends MongoRepository<User, String> {
     Boolean existsByEmail(String email);
     Boolean existsUserByUserName(String username);
     Optional<User> findByEmailOrUserName(String email, String username);
+
+    java.util.List<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(String email, String fullName);
 }

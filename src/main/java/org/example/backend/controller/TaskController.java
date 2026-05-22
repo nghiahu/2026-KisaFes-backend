@@ -35,4 +35,18 @@ public class TaskController extends BaseController {
             @RequestParam String statusId) {
         return success(taskService.updateTaskStatus(taskId, statusId), "Cập nhật trạng thái thành công");
     }
+
+    @PatchMapping("/{taskId}/assignee")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskAssignee(
+            @PathVariable String taskId,
+            @RequestParam(required = false) String assigneeId) {
+        return success(taskService.updateTaskAssignee(taskId, assigneeId), "Cập nhật người thực hiện thành công");
+    }
+
+    @PatchMapping("/{taskId}/priority")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskPriority(
+            @PathVariable String taskId,
+            @RequestParam String priority) {
+        return success(taskService.updateTaskPriority(taskId, priority), "Cập nhật độ ưu tiên thành công");
+    }
 }

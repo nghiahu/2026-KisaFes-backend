@@ -43,6 +43,27 @@ public class UserServiceImpl extends BaseServiceImpl<User, String> implements IU
         }
 
         User updatedUser = userRepository.save(user);
-        return UserProfileResponse.fromEntity(updatedUser);
+        return mapToProfileResponse(user);
+    }
+
+    @Override
+    public java.util.List<org.example.backend.dto.response.UserSearchResponse> searchUsers(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        String kw = keyword.trim();
+        return userRepository.findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCase(kw, kw).stream()
+                .filter(User::isActive)
+                .map(user -> org.example.backend.dto.response.UserSearchResponse.builder()
+                        .id(user.getId())
+                        .email(user.getEmail())
+                        .fullName(user.getFullName())
+                        .avatar(user.getAvatar())
+                        .build())
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    private UserProfileResponse mapToProfileResponse(User user) {
+        return UserProfileResponse.fromEntity(user);
     }
 }

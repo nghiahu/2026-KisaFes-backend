@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.backend.common.constants.ErrorCode;
 import org.example.backend.common.exception.CustomBusinessException;
 import org.example.backend.dto.request.AddProjectRequest;
+import org.example.backend.dto.request.InviteMemberRequest;
 import org.example.backend.dto.response.ProjectResponse;
 import org.example.backend.entity.*;
 import org.example.backend.repository.*;
@@ -48,6 +49,10 @@ public class ProjectServiceImpl implements IProjectService {
         project.setDescription(request.getDescription());
         project.setCategoryId(request.getCategoryId());
         project.setOwnerId(ownerId);
+        // Set methodology, default KANBAN if not provided
+        project.setMethodology(request.getMethodology() != null
+                ? request.getMethodology()
+                : Project.Methodology.KANBAN);
 
         // Map statuses
         if (request.getStatuses() != null) {
@@ -135,8 +140,9 @@ public class ProjectServiceImpl implements IProjectService {
             }
         }
 
-        // 7. Tự động seed 1 Sprint kích hoạt và 4 Tasks mẫu cho dự án mới
-        if (savedProject.getStatuses() != null && !savedProject.getStatuses().isEmpty()) {
+        // 7. Tự động seed 1 Sprint kích hoạt và 4 Tasks mẫu cho dự án Scrum mới
+        if (savedProject.getStatuses() != null && !savedProject.getStatuses().isEmpty()
+                && savedProject.getMethodology() == Project.Methodology.SCRUM) {
             Sprint sprint = new Sprint();
             sprint.setProjectId(savedProject.getId());
             sprint.setName("Sprint 1");
@@ -227,7 +233,6 @@ public class ProjectServiceImpl implements IProjectService {
 
         return projects.stream().map(project -> {
             ProjectResponse response = ProjectResponse.fromEntity(project);
-            
             List<ProjectMember> members = projectMemberRepository.findByProjectId(project.getId());
             List<String> memberUserIds = members.stream().map(ProjectMember::getUserId).toList();
             
@@ -236,12 +241,13 @@ public class ProjectServiceImpl implements IProjectService {
             response.setMembers(members.stream().map(m -> {
                 ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
                 mr.setId(m.getUserId());
+                mr.setActive(m.isActive());
                 users.stream().filter(u -> u.getId().equals(m.getUserId())).findFirst()
                         .ifPresent(u -> {
                             mr.setName(u.getFullName());
                             mr.setAvatar(u.getAvatar());
                         });
-                
+                mr.setRoleId(m.getRoleId());
                 if (project.getCustomRoles() != null) {
                     project.getCustomRoles().stream()
                             .filter(r -> r.getId().equals(m.getRoleId()))
@@ -269,11 +275,19 @@ public class ProjectServiceImpl implements IProjectService {
         response.setMembers(members.stream().map(m -> {
             ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
             mr.setId(m.getUserId());
+            mr.setActive(m.isActive());
             users.stream().filter(u -> u.getId().equals(m.getUserId())).findFirst()
                     .ifPresent(u -> {
                         mr.setName(u.getFullName());
                         mr.setAvatar(u.getAvatar());
                     });
+            mr.setRoleId(m.getRoleId());
+            if (project.getCustomRoles() != null) {
+                project.getCustomRoles().stream()
+                        .filter(r -> r.getId().equals(m.getRoleId()))
+                        .findFirst()
+                        .ifPresent(r -> mr.setRoleName(r.getName()));
+            }
             return mr;
         }).toList());
 
@@ -331,5 +345,149 @@ public class ProjectServiceImpl implements IProjectService {
                         }
                     }
                 });
+    }
+
+    @Override
+    @Transactional
+    public void inviteMember(String projectId, InviteMemberRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        
+        if (request.getEmail().equalsIgnoreCase(userDetails.getUser().getEmail())) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Bạn không thể tự mời chính mình vào dự án!");
+        }
+
+        User recipient = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.USER_NOT_FOUND, "Người dùng với email " + request.getEmail() + " không tồn tại"));
+
+        if (projectMemberRepository.existsByProjectIdAndUserId(projectId, recipient.getId())) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Người dùng này đã là thành viên của dự án");
+        }
+
+        Notification invitation = Notification.builder()
+                .recipientId(recipient.getId())
+                .senderId(userDetails.getUserId())
+                .projectId(projectId)
+                .message(String.format("Bạn đã được mời tham gia dự án '%s' bởi %s.", project.getName(), userDetails.getUsername()))
+                .type(NotificationType.INVITATION)
+                .status(NotificationStatus.PENDING)
+                .build();
+        
+        notificationRepository.save(invitation);
+    }
+
+    @Override
+    @Transactional
+    public void removeMember(String projectId, String userId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        if (project.getOwnerId().equals(userId)) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể xóa chủ sở hữu khỏi dự án");
+        }
+
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
+
+        member.setActive(false);
+        member.setRemovedAt(LocalDateTime.now());
+        projectMemberRepository.save(member);
+
+        // Unassign tasks
+        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        boolean changed = false;
+        for (Task task : tasks) {
+            if (userId.equals(task.getAssigneeId())) {
+                task.setAssigneeId(null);
+                changed = true;
+            }
+        }
+        if (changed) {
+            taskRepository.saveAll(tasks);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void restoreMember(String projectId, String userId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
+
+        if (member.isActive()) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Thành viên này vẫn đang hoạt động");
+        }
+
+        member.setActive(true);
+        member.setRemovedAt(null);
+        projectMemberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public void changeMemberRole(String projectId, String userId, org.example.backend.dto.request.ChangeRoleRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        if (project.getOwnerId().equals(userId)) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể thay đổi quyền của chủ sở hữu");
+        }
+
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
+
+        boolean roleExists = false;
+        if (project.getCustomRoles() != null) {
+            roleExists = project.getCustomRoles().stream().anyMatch(r -> r.getId().equals(request.getRoleId()));
+        }
+        if (!roleExists) {
+            throw new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Role không tồn tại trong dự án");
+        }
+
+        member.setRoleId(request.getRoleId());
+        projectMemberRepository.save(member);
+    }
+
+    @Override
+    @Transactional
+    public Project.ProjectRole addCustomRole(String projectId, org.example.backend.dto.request.AddProjectRoleRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        if (project.getCustomRoles() == null) {
+            project.setCustomRoles(new ArrayList<>());
+        }
+
+        boolean nameExists = project.getCustomRoles().stream()
+                .anyMatch(r -> r.getName().equalsIgnoreCase(request.getName()));
+        if (nameExists) {
+            throw new CustomBusinessException(ErrorCode.RESOURCE_ALREADY_EXISTS, "Tên Role đã tồn tại");
+        }
+
+        java.util.Set<Permission> permissions = new java.util.HashSet<>();
+        if (request.getPermissions() != null) {
+            for (String p : request.getPermissions()) {
+                try {
+                    permissions.add(Permission.valueOf(p));
+                } catch (IllegalArgumentException e) {
+                    // Ignore invalid
+                }
+            }
+        }
+
+        Project.ProjectRole newRole = Project.ProjectRole.builder()
+                .id(java.util.UUID.randomUUID().toString())
+                .name(request.getName())
+                .permissions(permissions)
+                .build();
+
+        project.getCustomRoles().add(newRole);
+        projectRepository.save(project);
+
+        return newRole;
     }
 }

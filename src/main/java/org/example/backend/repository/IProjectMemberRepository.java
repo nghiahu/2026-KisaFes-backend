@@ -10,4 +10,6 @@ import java.util.List;
 public interface IProjectMemberRepository extends MongoRepository<ProjectMember, String> {
     List<ProjectMember> findByUserId (String userId);
     List<ProjectMember> findByProjectId (String projectId);
+    Boolean existsByProjectIdAndUserId(String projectId, String userId);
+    java.util.Optional<ProjectMember> findByProjectIdAndUserId(String projectId, String userId);
 }

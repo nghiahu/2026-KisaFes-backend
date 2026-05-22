@@ -19,4 +19,8 @@ public class ProjectMember extends BaseEntity {
 
     /** Thời điểm user được thêm vào project (có thể set trong service khi gán member). */
     private LocalDateTime joinedAt;
+
+    /** Soft delete tracking */
+    private boolean active = true;
+    private LocalDateTime removedAt;
 }

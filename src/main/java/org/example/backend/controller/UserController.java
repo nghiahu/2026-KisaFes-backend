@@ -31,4 +31,10 @@ public class UserController extends BaseController {
         String email = authentication.getName();
         return success(userService.updateProfile(email, request), "Cập nhật thông tin cá nhân thành công");
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<ResponseWrapper<java.util.List<org.example.backend.dto.response.UserSearchResponse>>> searchUsers(
+            @RequestParam String keyword) {
+        return success(userService.searchUsers(keyword));
+    }
 }

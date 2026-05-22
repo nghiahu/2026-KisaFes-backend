@@ -96,6 +96,45 @@ public class TaskServiceImpl implements ITaskService {
         return mapToResponse(saved, project, users);
     }
 
+    @Override
+    @Transactional
+    public TaskResponse updateTaskAssignee(String taskId, String assigneeId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (assigneeId == null || assigneeId.trim().isEmpty()) {
+            task.setAssigneeId("Unassigned");
+        } else {
+            task.setAssigneeId(assigneeId);
+        }
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskPriority(String taskId, String priority) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        // Epic mặc định Medium, không cho thay đổi
+        if (TaskType.EPIC.equals(task.getType())) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Epic luôn có priority là Medium");
+        }
+
+        task.setPriority(priority);
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
     private TaskResponse mapToResponse(Task task, Project project, List<User> users) {
         TaskResponse res = new TaskResponse();
         res.setId(task.getId());
@@ -127,13 +166,20 @@ public class TaskServiceImpl implements ITaskService {
 
         if ("Unassigned".equalsIgnoreCase(task.getAssigneeId())) {
             res.setAssigneeName("Unassigned");
+            res.setAssigneeAvatar(null);
         } else {
             users.stream()
                     .filter(u -> u.getId().equals(task.getAssigneeId()))
                     .findFirst()
                     .ifPresentOrElse(
-                            u -> res.setAssigneeName(u.getFullName()),
-                            () -> res.setAssigneeName("Unassigned")
+                            u -> {
+                                res.setAssigneeName(u.getFullName());
+                                res.setAssigneeAvatar(u.getAvatar());
+                            },
+                            () -> {
+                                res.setAssigneeName("Unassigned");
+                                res.setAssigneeAvatar(null);
+                            }
                     );
         }
 
@@ -141,8 +187,14 @@ public class TaskServiceImpl implements ITaskService {
                 .filter(u -> u.getId().equals(task.getReporterId()))
                 .findFirst()
                 .ifPresentOrElse(
-                        u -> res.setReporterName(u.getFullName()),
-                        () -> res.setReporterName("nghĩa Ngô")
+                        u -> {
+                            res.setReporterName(u.getFullName());
+                            res.setReporterAvatar(u.getAvatar());
+                        },
+                        () -> {
+                            res.setReporterName("nghĩa Ngô");
+                            res.setReporterAvatar(null);
+                        }
                 );
 
         return res;

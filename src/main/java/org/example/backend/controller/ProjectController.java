@@ -4,14 +4,22 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.backend.common.base.BaseController;
 import org.example.backend.dto.request.AddProjectRequest;
+import org.example.backend.dto.request.AddProjectRoleRequest;
+import org.example.backend.dto.request.ChangeRoleRequest;
+import org.example.backend.dto.request.InviteMemberRequest;
 import org.example.backend.dto.response.ProjectResponse;
 import org.example.backend.dto.response.ResponseWrapper;
+import org.example.backend.entity.Project;
 import org.example.backend.service.IProjectService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,5 +45,45 @@ public class ProjectController extends BaseController {
     @GetMapping("/{id}")
     public ResponseEntity<ResponseWrapper<ProjectResponse>> getProjectById(@PathVariable String id) {
         return success(projectService.getProjectById(id));
+    }
+
+    @PostMapping("/{id}/invite")
+    public ResponseEntity<ResponseWrapper<Void>> inviteMember(
+            @PathVariable String id,
+            @Valid @RequestBody InviteMemberRequest request) {
+        projectService.inviteMember(id, request);
+        return success(null, "Đã gửi lời mời thành công");
+    }
+
+    @DeleteMapping("/{id}/members/{userId}")
+    public ResponseEntity<ResponseWrapper<Void>> removeMember(
+            @PathVariable String id, 
+            @PathVariable String userId) {
+        projectService.removeMember(id, userId);
+        return success(null, "Đã xóa thành viên khỏi dự án");
+    }
+
+    @PutMapping("/{id}/members/{userId}/restore")
+    public ResponseEntity<ResponseWrapper<Void>> restoreMember(
+            @PathVariable String id, 
+            @PathVariable String userId) {
+        projectService.restoreMember(id, userId);
+        return success(null, "Đã khôi phục thành viên vào dự án");
+    }
+
+    @PutMapping("/{id}/members/{userId}/role")
+    public ResponseEntity<ResponseWrapper<Void>> changeMemberRole(
+            @PathVariable String id,
+            @PathVariable String userId,
+            @Valid @RequestBody ChangeRoleRequest request) {
+        projectService.changeMemberRole(id, userId, request);
+        return success(null, "Đã cập nhật quyền thành viên");
+    }
+
+    @PostMapping("/{id}/roles")
+    public ResponseEntity<ResponseWrapper<Project.ProjectRole>> addCustomRole(
+            @PathVariable String id,
+            @Valid @RequestBody AddProjectRoleRequest request) {
+        return success(projectService.addCustomRole(id, request), "Đã tạo role thành công");
     }
 }
