@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface ITaskRepository extends MongoRepository<Task, String> {
+public interface ITaskRepository extends MongoRepository<Task, String>, ITaskRepositoryCustom {
     List<Task> findByProjectId(String projectId);
     List<Task> findBySprintId(String sprintId);
     

@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.example.backend.dto.request.TaskSearchRequest;
+import org.example.backend.dto.response.PageResponse;
 
 @RestController
 @RequestMapping("/api/v1/tasks")
@@ -20,8 +22,27 @@ public class TaskController extends BaseController {
     private final ITaskService taskService;
 
     @GetMapping("/project/{projectId}")
-    public ResponseEntity<ResponseWrapper<List<TaskResponse>>> getTasksByProjectId(@PathVariable String projectId) {
-        return success(taskService.getTasksByProjectId(projectId));
+    public ResponseEntity<ResponseWrapper<PageResponse<TaskResponse>>> getTasksByProjectId(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String statusId,
+            @RequestParam(required = false) String assigneeId,
+            @RequestParam(required = false) String priority,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        TaskSearchRequest request = TaskSearchRequest.builder()
+                .projectId(projectId)
+                .keyword(keyword)
+                .type(type)
+                .statusId(statusId)
+                .assigneeId(assigneeId)
+                .priority(priority)
+                .page(page)
+                .size(size)
+                .build();
+        return success(taskService.getTasksByProjectId(request));
     }
 
     @PostMapping

@@ -1,5 +1,9 @@
 package org.example.backend.service.impl;
 
+import org.example.backend.dto.request.TaskSearchRequest;
+import org.example.backend.dto.response.PageResponse;
+import org.springframework.data.domain.Page;
+
 import lombok.RequiredArgsConstructor;
 import org.example.backend.common.constants.ErrorCode;
 import org.example.backend.common.exception.CustomBusinessException;
@@ -31,14 +35,24 @@ public class TaskServiceImpl implements ITaskService {
     private final IUserRepository userRepository;
 
     @Override
-    public List<TaskResponse> getTasksByProjectId(String projectId) {
-        Project project = projectRepository.findById(projectId)
+    public PageResponse<TaskResponse> getTasksByProjectId(TaskSearchRequest request) {
+        Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
-        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        Page<Task> taskPage = taskRepository.searchTasks(request);
         List<User> users = userRepository.findAll();
 
-        return tasks.stream().map(task -> mapToResponse(task, project, users)).collect(Collectors.toList());
+        List<TaskResponse> responses = taskPage.getContent().stream()
+                .map(task -> mapToResponse(task, project, users))
+                .collect(Collectors.toList());
+
+        return PageResponse.<TaskResponse>builder()
+                .content(responses)
+                .page(taskPage.getNumber() + 1)
+                .size(taskPage.getSize())
+                .totalElements(taskPage.getTotalElements())
+                .totalPages(taskPage.getTotalPages())
+                .build();
     }
 
     @Override

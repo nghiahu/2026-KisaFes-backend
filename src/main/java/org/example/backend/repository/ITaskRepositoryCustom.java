@@ -1,0 +1,9 @@
+package org.example.backend.repository;
+
+import org.example.backend.dto.request.TaskSearchRequest;
+import org.example.backend.entity.Task;
+import org.springframework.data.domain.Page;
+
+public interface ITaskRepositoryCustom {
+    Page<Task> searchTasks(TaskSearchRequest request);
+}
