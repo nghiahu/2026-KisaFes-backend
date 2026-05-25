@@ -89,6 +89,7 @@ public class TaskServiceImpl implements ITaskService {
         } catch (IllegalArgumentException e) {
             task.setType(TaskType.TASK);
         }
+        task.setDueDate(request.getDueDate());
 
         Task saved = taskRepository.save(task);
         List<User> users = userRepository.findAll();
@@ -144,6 +145,40 @@ public class TaskServiceImpl implements ITaskService {
         }
 
         task.setPriority(priority);
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskDueDate(String taskId, java.time.LocalDateTime dueDate) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        task.setDueDate(dueDate);
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskTitle(String taskId, String title) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (title == null || title.trim().isEmpty()) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Tiêu đề không được để trống");
+        }
+
+        task.setTitle(title.trim());
         Task saved = taskRepository.save(task);
         List<User> users = userRepository.findAll();
         return mapToResponse(saved, project, users);
@@ -212,5 +247,12 @@ public class TaskServiceImpl implements ITaskService {
                 );
 
         return res;
+    }
+    @Override
+    @Transactional
+    public void deleteTask(String taskId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+        taskRepository.delete(task);
     }
 }

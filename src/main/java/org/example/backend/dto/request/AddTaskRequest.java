@@ -19,4 +19,5 @@ public class AddTaskRequest {
     private Integer storyPoints = 0;
     private String assigneeId;
     private String type = "task"; // "story" | "task" | "bug"
+    private java.time.LocalDateTime dueDate;
 }

@@ -13,4 +13,7 @@ public interface ITaskService {
     TaskResponse updateTaskStatus(String taskId, String statusId);
     TaskResponse updateTaskAssignee(String taskId, String assigneeId);
     TaskResponse updateTaskPriority(String taskId, String priority);
+    TaskResponse updateTaskDueDate(String taskId, java.time.LocalDateTime dueDate);
+    TaskResponse updateTaskTitle(String taskId, String title);
+    void deleteTask(String taskId);
 }

@@ -70,4 +70,24 @@ public class TaskController extends BaseController {
             @RequestParam String priority) {
         return success(taskService.updateTaskPriority(taskId, priority), "Cập nhật độ ưu tiên thành công");
     }
+
+    @PatchMapping("/{taskId}/due-date")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskDueDate(
+            @PathVariable String taskId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime dueDate) {
+        return success(taskService.updateTaskDueDate(taskId, dueDate), "Cập nhật ngày hết hạn thành công");
+    }
+
+    @PatchMapping("/{taskId}/title")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskTitle(
+            @PathVariable String taskId,
+            @RequestParam String title) {
+        return success(taskService.updateTaskTitle(taskId, title), "Cập nhật tiêu đề thành công");
+    }
+
+    @DeleteMapping("/{taskId}")
+    public ResponseEntity<ResponseWrapper<Void>> deleteTask(@PathVariable String taskId) {
+        taskService.deleteTask(taskId);
+        return success(null, "Xóa công việc thành công");
+    }
 }
