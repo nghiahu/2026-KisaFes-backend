@@ -55,10 +55,5 @@ class TaskRelation {
     private RelationType type;
 }
 
-@Data
-class SubTask {
-    private String id = UUID.randomUUID().toString();
-    private String title;
-    private boolean isDone = false;
-}
+
 

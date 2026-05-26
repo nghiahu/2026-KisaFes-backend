@@ -12,8 +12,11 @@ import org.example.backend.dto.response.TaskResponse;
 import org.example.backend.entity.Project;
 import org.example.backend.entity.Resolution;
 import org.example.backend.entity.Task;
+import org.example.backend.entity.SubTask;
 import org.example.backend.entity.TaskType;
 import org.example.backend.entity.User;
+import org.example.backend.dto.request.AddSubTaskRequest;
+import org.example.backend.dto.response.SubTaskResponse;
 import org.example.backend.repository.IProjectRepository;
 import org.example.backend.repository.ITaskRepository;
 import org.example.backend.repository.IUserRepository;
@@ -184,6 +187,21 @@ public class TaskServiceImpl implements ITaskService {
         return mapToResponse(saved, project, users);
     }
 
+    @Override
+    @Transactional
+    public TaskResponse updateTaskDescription(String taskId, String description) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        task.setDescription(description != null ? description.trim() : null);
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
     private TaskResponse mapToResponse(Task task, Project project, List<User> users) {
         TaskResponse res = new TaskResponse();
         res.setId(task.getId());
@@ -246,8 +264,83 @@ public class TaskServiceImpl implements ITaskService {
                         }
                 );
 
+        if (task.getSubTasks() != null) {
+            List<SubTaskResponse> subTaskResponses = task.getSubTasks().stream().map(st -> {
+                SubTaskResponse str = new SubTaskResponse();
+                str.setId(st.getId());
+                str.setTitle(st.getTitle());
+                str.setDone(st.isDone());
+                return str;
+            }).collect(Collectors.toList());
+            res.setSubTasks(subTaskResponses);
+        } else {
+            res.setSubTasks(new java.util.ArrayList<>());
+        }
+
         return res;
     }
+
+    @Override
+    @Transactional
+    public TaskResponse addSubTask(String taskId, AddSubTaskRequest request) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+        
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (task.getSubTasks() == null) {
+            task.setSubTasks(new java.util.ArrayList<>());
+        }
+        
+        SubTask newSubTask = new SubTask();
+        newSubTask.setTitle(request.getTitle());
+        task.getSubTasks().add(newSubTask);
+        
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse toggleSubTask(String taskId, String subtaskId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+        
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (task.getSubTasks() != null) {
+            task.getSubTasks().stream()
+                    .filter(st -> st.getId().equals(subtaskId))
+                    .findFirst()
+                    .ifPresent(st -> st.setDone(!st.isDone()));
+        }
+        
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse deleteSubTask(String taskId, String subtaskId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+        
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (task.getSubTasks() != null) {
+            task.getSubTasks().removeIf(st -> st.getId().equals(subtaskId));
+        }
+        
+        Task saved = taskRepository.save(task);
+        List<User> users = userRepository.findAll();
+        return mapToResponse(saved, project, users);
+    }
+
     @Override
     @Transactional
     public void deleteTask(String taskId) {

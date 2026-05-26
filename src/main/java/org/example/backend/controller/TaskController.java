@@ -85,6 +85,35 @@ public class TaskController extends BaseController {
         return success(taskService.updateTaskTitle(taskId, title), "Cập nhật tiêu đề thành công");
     }
 
+    @PatchMapping("/{taskId}/description")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskDescription(
+            @PathVariable String taskId,
+            @RequestBody java.util.Map<String, String> payload) {
+        String description = payload.get("description");
+        return success(taskService.updateTaskDescription(taskId, description), "Cập nhật mô tả thành công");
+    }
+
+    @PostMapping("/{taskId}/subtasks")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> addSubTask(
+            @PathVariable String taskId,
+            @Valid @RequestBody org.example.backend.dto.request.AddSubTaskRequest request) {
+        return success(taskService.addSubTask(taskId, request), "Thêm subtask thành công");
+    }
+
+    @PatchMapping("/{taskId}/subtasks/{subtaskId}/toggle")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> toggleSubTask(
+            @PathVariable String taskId,
+            @PathVariable String subtaskId) {
+        return success(taskService.toggleSubTask(taskId, subtaskId), "Cập nhật subtask thành công");
+    }
+
+    @DeleteMapping("/{taskId}/subtasks/{subtaskId}")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> deleteSubTask(
+            @PathVariable String taskId,
+            @PathVariable String subtaskId) {
+        return success(taskService.deleteSubTask(taskId, subtaskId), "Xóa subtask thành công");
+    }
+
     @DeleteMapping("/{taskId}")
     public ResponseEntity<ResponseWrapper<Void>> deleteTask(@PathVariable String taskId) {
         taskService.deleteTask(taskId);

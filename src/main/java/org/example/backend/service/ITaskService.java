@@ -15,5 +15,10 @@ public interface ITaskService {
     TaskResponse updateTaskPriority(String taskId, String priority);
     TaskResponse updateTaskDueDate(String taskId, java.time.LocalDateTime dueDate);
     TaskResponse updateTaskTitle(String taskId, String title);
+    TaskResponse updateTaskDescription(String taskId, String description);
     void deleteTask(String taskId);
+    
+    TaskResponse addSubTask(String taskId, org.example.backend.dto.request.AddSubTaskRequest request);
+    TaskResponse toggleSubTask(String taskId, String subtaskId);
+    TaskResponse deleteSubTask(String taskId, String subtaskId);
 }
