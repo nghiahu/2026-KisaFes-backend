@@ -15,13 +15,18 @@ import org.example.backend.entity.Task;
 import org.example.backend.entity.SubTask;
 import org.example.backend.entity.TaskType;
 import org.example.backend.entity.User;
+import org.example.backend.entity.Activity;
+import org.example.backend.entity.ActivityType;
 import org.example.backend.dto.request.AddSubTaskRequest;
 import org.example.backend.dto.response.SubTaskResponse;
 import org.example.backend.repository.IProjectRepository;
 import org.example.backend.repository.ITaskRepository;
 import org.example.backend.repository.IUserRepository;
+import org.example.backend.repository.IActivityRepository;
 import org.example.backend.security.principle.MyUserDetails;
 import org.example.backend.service.ITaskService;
+import org.example.backend.service.IProjectService;
+import org.example.backend.entity.Permission;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +41,35 @@ public class TaskServiceImpl implements ITaskService {
     private final ITaskRepository taskRepository;
     private final IProjectRepository projectRepository;
     private final IUserRepository userRepository;
+    private final IActivityRepository activityRepository;
+    private final IProjectService projectService;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
+    private void broadcastTaskEvent(String projectId, String type, Object data) {
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("type", type);
+            payload.put("data", data);
+            messagingTemplate.convertAndSend("/topic/project/" + projectId, (Object) payload);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void logActivity(String taskId, String content) {
+        try {
+            MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            String currentUserId = userDetails.getUserId();
+            Activity activity = new Activity();
+            activity.setTaskId(taskId);
+            activity.setUserId(currentUserId);
+            activity.setType(ActivityType.STATUS_CHANGE);
+            activity.setContent(content);
+            activityRepository.save(activity);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public PageResponse<TaskResponse> getTasksByProjectId(TaskSearchRequest request) {
@@ -67,6 +101,10 @@ public class TaskServiceImpl implements ITaskService {
         MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         String currentUserId = userDetails.getUserId();
 
+        if (!projectService.hasPermission(request.getProjectId(), currentUserId, Permission.TASK_CREATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền tạo công việc trong dự án này");
+        }
+
         long taskCount = taskRepository.countByProjectId(request.getProjectId());
         String taskKey = project.getCode() + "-" + (taskCount + 1);
 
@@ -96,7 +134,9 @@ public class TaskServiceImpl implements ITaskService {
 
         Task saved = taskRepository.save(task);
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "CREATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -108,10 +148,39 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_CHANGE_STATUS)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền thay đổi trạng thái công việc trong dự án này");
+        }
+
+        String oldStatusId = task.getStatusId();
+        String oldStatusLabel = "To Do";
+        if (project.getStatuses() != null) {
+            oldStatusLabel = project.getStatuses().stream()
+                    .filter(s -> s.getStatusId().equals(oldStatusId))
+                    .map(s -> s.getLabel())
+                    .findFirst()
+                    .orElse("To Do");
+        }
+
         task.setStatusId(statusId);
         Task saved = taskRepository.save(task);
+
+        String newStatusLabel = "To Do";
+        if (project.getStatuses() != null) {
+            newStatusLabel = project.getStatuses().stream()
+                    .filter(s -> s.getStatusId().equals(statusId))
+                    .map(s -> s.getLabel())
+                    .findFirst()
+                    .orElse("To Do");
+        }
+
+        logActivity(taskId, "changed status from " + oldStatusLabel + " to " + newStatusLabel);
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -123,14 +192,34 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_ASSIGN)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền gán người thực hiện công việc trong dự án này");
+        }
+
+        String oldAssignee = "Unassigned";
+        if (task.getAssigneeId() != null && !"Unassigned".equalsIgnoreCase(task.getAssigneeId())) {
+            oldAssignee = userRepository.findById(task.getAssigneeId()).map(User::getFullName).orElse("Unassigned");
+        }
+
         if (assigneeId == null || assigneeId.trim().isEmpty()) {
             task.setAssigneeId("Unassigned");
         } else {
             task.setAssigneeId(assigneeId);
         }
         Task saved = taskRepository.save(task);
+
+        String newAssignee = "Unassigned";
+        if (saved.getAssigneeId() != null && !"Unassigned".equalsIgnoreCase(saved.getAssigneeId())) {
+            newAssignee = userRepository.findById(saved.getAssigneeId()).map(User::getFullName).orElse("Unassigned");
+        }
+
+        logActivity(taskId, "changed assignee from " + oldAssignee + " to " + newAssignee);
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -142,15 +231,26 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật thông tin công việc trong dự án này");
+        }
+
         // Epic mặc định Medium, không cho thay đổi
         if (TaskType.EPIC.equals(task.getType())) {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Epic luôn có priority là Medium");
         }
 
+        String oldPriority = task.getPriority();
         task.setPriority(priority);
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "changed priority from " + (oldPriority != null ? oldPriority : "Medium") + " to " + priority);
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -162,10 +262,20 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật thông tin công việc trong dự án này");
+        }
+
         task.setDueDate(dueDate);
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, dueDate != null ? "changed due date to " + dueDate.toLocalDate().toString() : "removed due date");
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -177,14 +287,24 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật thông tin công việc trong dự án này");
+        }
+
         if (title == null || title.trim().isEmpty()) {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Tiêu đề không được để trống");
         }
 
         task.setTitle(title.trim());
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "changed title to \"" + title.trim() + "\"");
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -196,10 +316,20 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật thông tin công việc trong dự án này");
+        }
+
         task.setDescription(description != null ? description.trim() : null);
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "updated description");
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     private TaskResponse mapToResponse(Task task, Project project, List<User> users) {
@@ -289,6 +419,11 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật công việc (thêm subtask) trong dự án này");
+        }
+
         if (task.getSubTasks() == null) {
             task.setSubTasks(new java.util.ArrayList<>());
         }
@@ -298,8 +433,13 @@ public class TaskServiceImpl implements ITaskService {
         task.getSubTasks().add(newSubTask);
         
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "added subtask \"" + request.getTitle() + "\"");
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -311,16 +451,32 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật công việc (thay đổi subtask) trong dự án này");
+        }
+
+        String subtaskTitle = "";
+        boolean isDone = false;
         if (task.getSubTasks() != null) {
-            task.getSubTasks().stream()
-                    .filter(st -> st.getId().equals(subtaskId))
-                    .findFirst()
-                    .ifPresent(st -> st.setDone(!st.isDone()));
+            for (SubTask st : task.getSubTasks()) {
+                if (st.getId().equals(subtaskId)) {
+                    subtaskTitle = st.getTitle();
+                    isDone = !st.isDone();
+                    st.setDone(isDone);
+                    break;
+                }
+            }
         }
         
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "marked subtask \"" + subtaskTitle + "\" as " + (isDone ? "done" : "undone"));
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -332,13 +488,30 @@ public class TaskServiceImpl implements ITaskService {
         Project project = projectRepository.findById(task.getProjectId())
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật công việc (xóa subtask) trong dự án này");
+        }
+
+        String subtaskTitle = "";
         if (task.getSubTasks() != null) {
+            for (SubTask st : task.getSubTasks()) {
+                if (st.getId().equals(subtaskId)) {
+                    subtaskTitle = st.getTitle();
+                    break;
+                }
+            }
             task.getSubTasks().removeIf(st -> st.getId().equals(subtaskId));
         }
         
         Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "deleted subtask \"" + subtaskTitle + "\"");
+
         List<User> users = userRepository.findAll();
-        return mapToResponse(saved, project, users);
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
     }
 
     @Override
@@ -346,6 +519,14 @@ public class TaskServiceImpl implements ITaskService {
     public void deleteTask(String taskId) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+        String projectId = task.getProjectId();
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(projectId, userDetails.getUserId(), Permission.TASK_DELETE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền xóa công việc trong dự án này");
+        }
+
         taskRepository.delete(task);
+        broadcastTaskEvent(projectId, "DELETE_TASK", taskId);
     }
 }

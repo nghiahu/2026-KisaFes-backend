@@ -25,6 +25,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
 
+import org.example.backend.dto.request.UpdateProjectRoleRequest;
+
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.example.backend.dto.request.UpdateProjectNameRequest;
+
 @RestController
 @RequestMapping("/api/v1/projects")
 @RequiredArgsConstructor
@@ -45,6 +50,13 @@ public class ProjectController extends BaseController {
     @GetMapping("/{id}")
     public ResponseEntity<ResponseWrapper<ProjectResponse>> getProjectById(@PathVariable String id) {
         return success(projectService.getProjectById(id));
+    }
+
+    @PatchMapping("/{id}/name")
+    public ResponseEntity<ResponseWrapper<ProjectResponse>> updateProjectName(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateProjectNameRequest request) {
+        return success(projectService.updateProjectName(id, request), "Đã cập nhật tên dự án");
     }
 
     @PostMapping("/{id}/invite")
@@ -86,4 +98,13 @@ public class ProjectController extends BaseController {
             @Valid @RequestBody AddProjectRoleRequest request) {
         return success(projectService.addCustomRole(id, request), "Đã tạo role thành công");
     }
+
+    @PutMapping("/{id}/roles/{roleId}")
+    public ResponseEntity<ResponseWrapper<Project.ProjectRole>> updateCustomRole(
+            @PathVariable String id,
+            @PathVariable String roleId,
+            @Valid @RequestBody UpdateProjectRoleRequest request) {
+        return success(projectService.updateCustomRole(id, roleId, request), "Cập nhật vai trò thành công");
+    }
 }
+

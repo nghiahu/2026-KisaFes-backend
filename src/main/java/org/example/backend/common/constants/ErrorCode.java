@@ -37,6 +37,8 @@ public enum ErrorCode {
     ROLE_NOT_FOUND("Không xác định được phân quyền của hệ thống", HttpStatus.NOT_FOUND),
     USERNAME_ALREADY_EXISTS("Tên người dùng đã tôn tại", HttpStatus.CONFLICT),
 
+    PERMISSION_DENIED("Bạn không có quyền này", HttpStatus.FORBIDDEN),
+
     // SYSTEM
     INVALID_REFRESH_TOKEN("Refresh Token không hợp lệ", HttpStatus.UNAUTHORIZED),
     INTERNAL_ERROR("Lỗi hệ thống", HttpStatus.INTERNAL_SERVER_ERROR);

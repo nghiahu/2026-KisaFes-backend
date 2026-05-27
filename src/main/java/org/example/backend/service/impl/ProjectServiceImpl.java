@@ -29,6 +29,18 @@ public class ProjectServiceImpl implements IProjectService {
     private final INotificationRepository notificationRepository;
     private final ISprintRepository sprintRepository;
     private final ITaskRepository taskRepository;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
+    private void broadcastProjectEvent(String projectId, String type) {
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("type", type);
+            payload.put("data", null);
+            messagingTemplate.convertAndSend("/topic/project/" + projectId, (Object) payload);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     @Transactional
@@ -84,6 +96,7 @@ public class ProjectServiceImpl implements IProjectService {
             project.setCustomRoles(request.getRoles().stream()
                     .map(r -> {
                         Project.ProjectRole pr = new Project.ProjectRole();
+                        pr.setId(java.util.UUID.randomUUID().toString());
                         pr.setName(r.getName());
                         if (r.getPermissions() != null) {
                             pr.setPermissions(r.getPermissions().stream()
@@ -355,6 +368,10 @@ public class ProjectServiceImpl implements IProjectService {
 
         MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_INVITE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền mời thành viên vào dự án này");
+        }
+
         if (request.getEmail().equalsIgnoreCase(userDetails.getUser().getEmail())) {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Bạn không thể tự mời chính mình vào dự án!");
         }
@@ -384,6 +401,11 @@ public class ProjectServiceImpl implements IProjectService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
 
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_REMOVE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền xóa thành viên khỏi dự án này");
+        }
+
         if (project.getOwnerId().equals(userId)) {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể xóa chủ sở hữu khỏi dự án");
         }
@@ -407,6 +429,7 @@ public class ProjectServiceImpl implements IProjectService {
         if (changed) {
             taskRepository.saveAll(tasks);
         }
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
     }
 
     @Override
@@ -414,6 +437,11 @@ public class ProjectServiceImpl implements IProjectService {
     public void restoreMember(String projectId, String userId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_INVITE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền mời/khôi phục thành viên trong dự án này");
+        }
 
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
@@ -425,6 +453,7 @@ public class ProjectServiceImpl implements IProjectService {
         member.setActive(true);
         member.setRemovedAt(null);
         projectMemberRepository.save(member);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
     }
 
     @Override
@@ -432,6 +461,11 @@ public class ProjectServiceImpl implements IProjectService {
     public void changeMemberRole(String projectId, String userId, org.example.backend.dto.request.ChangeRoleRequest request) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_UPDATE_ROLE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền thay đổi quyền thành viên trong dự án này");
+        }
 
         if (project.getOwnerId().equals(userId)) {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể thay đổi quyền của chủ sở hữu");
@@ -450,6 +484,7 @@ public class ProjectServiceImpl implements IProjectService {
 
         member.setRoleId(request.getRoleId());
         projectMemberRepository.save(member);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
     }
 
     @Override
@@ -457,6 +492,11 @@ public class ProjectServiceImpl implements IProjectService {
     public Project.ProjectRole addCustomRole(String projectId, org.example.backend.dto.request.AddProjectRoleRequest request) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.ROLE_MANAGE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền quản lý vai trò trong dự án này");
+        }
 
         if (project.getCustomRoles() == null) {
             project.setCustomRoles(new ArrayList<>());
@@ -487,7 +527,120 @@ public class ProjectServiceImpl implements IProjectService {
 
         project.getCustomRoles().add(newRole);
         projectRepository.save(project);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
 
         return newRole;
     }
+
+    @Override
+    @Transactional
+    public Project.ProjectRole updateCustomRole(String projectId, String roleId, org.example.backend.dto.request.UpdateProjectRoleRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.ROLE_MANAGE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền quản lý vai trò trong dự án này");
+        }
+
+        if (project.getCustomRoles() == null) {
+            throw new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vai trò cần sửa");
+        }
+
+        Project.ProjectRole targetRole = project.getCustomRoles().stream()
+                .filter(r -> r.getId().equals(roleId))
+                .findFirst()
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Vai trò không tồn tại trong dự án"));
+
+        // Do not allow editing owner role
+        if (targetRole.getName().toLowerCase().contains("owner")) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể chỉnh sửa quyền của vai trò Owner (Chủ sở hữu)");
+        }
+
+        if (request.getName() != null && !request.getName().trim().isEmpty()) {
+            String newName = request.getName().trim();
+            if (!newName.equalsIgnoreCase(targetRole.getName())) {
+                boolean nameExists = project.getCustomRoles().stream()
+                        .anyMatch(r -> r.getName().equalsIgnoreCase(newName));
+                if (nameExists) {
+                    throw new CustomBusinessException(ErrorCode.RESOURCE_ALREADY_EXISTS, "Tên Role đã tồn tại");
+                }
+                targetRole.setName(newName);
+            }
+        }
+
+        if (request.getPermissions() != null) {
+            java.util.Set<Permission> permissions = new java.util.HashSet<>();
+            for (String p : request.getPermissions()) {
+                try {
+                    permissions.add(Permission.valueOf(p));
+                } catch (IllegalArgumentException e) {
+                    // Ignore invalid
+                }
+            }
+            targetRole.setPermissions(permissions);
+        }
+
+        projectRepository.save(project);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
+        return targetRole;
+    }
+
+    @Override
+    public boolean hasPermission(String projectId, String userId, Permission permission) {
+        Project project = projectRepository.findById(projectId).orElse(null);
+        if (project == null) return false;
+
+        // Owner/Creator automatically has all permissions
+        if (userId.equals(project.getOwnerId())) {
+            return true;
+        }
+
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId).orElse(null);
+        if (member == null || !member.isActive()) {
+            return false;
+        }
+
+        String targetRoleId = member.getRoleId();
+
+        // Fallback: If member's roleId is null, resolve it to the first 'developer' or 'member' role in the project
+        if (targetRoleId == null && project.getCustomRoles() != null) {
+            targetRoleId = project.getCustomRoles().stream()
+                    .filter(r -> r.getName().toLowerCase().contains("developer") || r.getName().toLowerCase().contains("member"))
+                    .map(Project.ProjectRole::getId)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (project.getCustomRoles() != null && targetRoleId != null) {
+            for (Project.ProjectRole role : project.getCustomRoles()) {
+                if (targetRoleId.equals(role.getId())) {
+                    return role.getPermissions() != null && role.getPermissions().contains(permission);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    @Transactional
+    public ProjectResponse updateProjectName(String projectId, org.example.backend.dto.request.UpdateProjectNameRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.PROJECT_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền chỉnh sửa tên dự án này");
+        }
+
+        project.setName(request.getName().trim());
+        projectRepository.save(project);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
+
+        ProjectResponse response = ProjectResponse.fromEntity(project);
+        populateProjectMetrics(response, project);
+        return response;
+    }
 }
+

@@ -17,4 +17,7 @@ public interface IProjectService {
     void restoreMember(String projectId, String userId);
     void changeMemberRole(String projectId, String userId, ChangeRoleRequest request);
     Project.ProjectRole addCustomRole(String projectId, AddProjectRoleRequest request);
+    Project.ProjectRole updateCustomRole(String projectId, String roleId, org.example.backend.dto.request.UpdateProjectRoleRequest request);
+    boolean hasPermission(String projectId, String userId, org.example.backend.entity.Permission permission);
+    ProjectResponse updateProjectName(String projectId, org.example.backend.dto.request.UpdateProjectNameRequest request);
 }
