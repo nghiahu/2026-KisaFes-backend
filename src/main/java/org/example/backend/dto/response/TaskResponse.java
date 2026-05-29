@@ -28,4 +28,9 @@ public class TaskResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private java.util.List<SubTaskResponse> subTasks;
+
+    // Scrum fields
+    private String epicId;
+    private Long backlogPosition;
+    private Long boardPosition;
 }

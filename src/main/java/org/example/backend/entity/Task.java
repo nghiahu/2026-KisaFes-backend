@@ -32,6 +32,10 @@ public class Task extends BaseEntity {
     private String reporterId;
     private TaskType type;
 
+    private String epicId;           // nullable – epic this task belongs to
+    private Long backlogPosition;    // ordering in backlog view
+    private Long boardPosition;      // ordering within board column
+
     private Resolution resolution;
     private LocalDateTime dueDate;
 

@@ -1,23 +1,31 @@
 package org.example.backend.service;
 
+import org.example.backend.dto.request.CompleteSprintRequest;
 import org.example.backend.dto.request.SprintRequest;
+import org.example.backend.dto.request.UpdateSprintRequest;
 import org.example.backend.dto.response.SprintResponse;
+import org.example.backend.dto.response.TaskResponse;
 
 import java.util.List;
 
 public interface ISprintService {
-    /** Tạo sprint mới cho dự án (trạng thái PLANNING) */
     SprintResponse createSprint(String projectId, SprintRequest request);
-
-    /** Lấy danh sách tất cả sprint của một dự án */
     List<SprintResponse> getSprintsByProject(String projectId);
-
-    /** Lấy sprint đang active của dự án */
     SprintResponse getActiveSprint(String projectId);
-
-    /** Bắt đầu sprint (PLANNING → ACTIVE). Chỉ một sprint được active tại một thời điểm */
     SprintResponse startSprint(String projectId, String sprintId);
 
-    /** Hoàn thành sprint (ACTIVE → COMPLETED) */
-    SprintResponse completeSprint(String projectId, String sprintId);
+    /** Complete sprint and migrate incomplete tasks */
+    SprintResponse completeSprintWithMigration(String projectId, String sprintId, CompleteSprintRequest request);
+
+    /** Update sprint metadata (name, goal, dates) */
+    SprintResponse updateSprint(String projectId, String sprintId, UpdateSprintRequest request);
+
+    /** Delete a PLANNING sprint only */
+    void deleteSprint(String projectId, String sprintId);
+
+    /** Get all tasks for a sprint */
+    List<TaskResponse> getSprintTasks(String projectId, String sprintId);
+
+    /** Get backlog tasks (sprintId == null) */
+    List<TaskResponse> getBacklog(String projectId);
 }

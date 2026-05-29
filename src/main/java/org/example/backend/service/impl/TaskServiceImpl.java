@@ -255,6 +255,32 @@ public class TaskServiceImpl implements ITaskService {
 
     @Override
     @Transactional
+    public TaskResponse updateTaskStoryPoints(String taskId, Integer storyPoints) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!projectService.hasPermission(task.getProjectId(), userDetails.getUserId(), Permission.TASK_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền cập nhật thông tin công việc trong dự án này");
+        }
+
+        Integer oldPoints = task.getStoryPoints();
+        task.setStoryPoints(storyPoints);
+        Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "changed story points from " + (oldPoints != null ? oldPoints : "none") + " to " + (storyPoints != null ? storyPoints : "none"));
+
+        List<User> users = userRepository.findAll();
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
+    }
+
+    @Override
+    @Transactional
     public TaskResponse updateTaskDueDate(String taskId, java.time.LocalDateTime dueDate) {
         Task task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
@@ -350,6 +376,10 @@ public class TaskServiceImpl implements ITaskService {
         res.setDueDate(task.getDueDate());
         res.setCreatedAt(task.getCreatedAt());
         res.setUpdatedAt(task.getUpdatedAt());
+        // Scrum fields
+        res.setEpicId(task.getEpicId());
+        res.setBacklogPosition(task.getBacklogPosition());
+        res.setBoardPosition(task.getBoardPosition());
 
         if (project.getStatuses() != null) {
             project.getStatuses().stream()
@@ -528,5 +558,48 @@ public class TaskServiceImpl implements ITaskService {
 
         taskRepository.delete(task);
         broadcastTaskEvent(projectId, "DELETE_TASK", taskId);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse moveTaskToSprint(String taskId, String sprintId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        String oldSprintId = task.getSprintId();
+        task.setSprintId(sprintId); // null = move to backlog
+        Task saved = taskRepository.save(task);
+
+        String logMsg = sprintId == null
+                ? "moved task to backlog"
+                : "moved task to sprint " + sprintId;
+        logActivity(taskId, logMsg);
+
+        List<User> users = userRepository.findAll();
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "TASK_MOVED", response);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskPosition(String taskId, Long backlogPosition, Long boardPosition) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (backlogPosition != null) task.setBacklogPosition(backlogPosition);
+        if (boardPosition != null) task.setBoardPosition(boardPosition);
+        Task saved = taskRepository.save(task);
+
+        List<User> users = userRepository.findAll();
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "TASK_REORDERED", response);
+        return response;
     }
 }

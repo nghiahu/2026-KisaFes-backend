@@ -16,5 +16,7 @@ public class Sprint extends BaseEntity {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private String goal;
-    private String status;
+    private String status; // PLANNING | ACTIVE | COMPLETED
+    private int order = 0; // for stable ordering
 }
+

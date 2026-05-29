@@ -10,5 +10,8 @@ import java.util.Optional;
 @Repository
 public interface ISprintRepository extends MongoRepository<Sprint, String> {
     List<Sprint> findByProjectId(String projectId);
+    List<Sprint> findByProjectIdOrderByOrderAsc(String projectId);
+    List<Sprint> findByProjectIdAndStatus(String projectId, String status);
     Optional<Sprint> findFirstByProjectIdAndStatus(String projectId, String status);
+    long countByProjectId(String projectId);
 }

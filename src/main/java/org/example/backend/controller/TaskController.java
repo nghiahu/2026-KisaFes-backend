@@ -71,6 +71,13 @@ public class TaskController extends BaseController {
         return success(taskService.updateTaskPriority(taskId, priority), "Cập nhật độ ưu tiên thành công");
     }
 
+    @PatchMapping("/{taskId}/story-points")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskStoryPoints(
+            @PathVariable String taskId,
+            @RequestParam(required = false) Integer storyPoints) {
+        return success(taskService.updateTaskStoryPoints(taskId, storyPoints), "Cập nhật story points thành công");
+    }
+
     @PatchMapping("/{taskId}/due-date")
     public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskDueDate(
             @PathVariable String taskId,
@@ -119,4 +126,22 @@ public class TaskController extends BaseController {
         taskService.deleteTask(taskId);
         return success(null, "Xóa công việc thành công");
     }
+
+    /** Move task to a sprint or to backlog (sprintId = null) */
+    @PatchMapping("/{taskId}/sprint")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> moveTaskToSprint(
+            @PathVariable String taskId,
+            @RequestBody org.example.backend.dto.request.MoveTaskSprintRequest request) {
+        return success(taskService.moveTaskToSprint(taskId, request.getSprintId()), "Di chuyển task thành công");
+    }
+
+    /** Update drag-and-drop ordering position */
+    @PatchMapping("/{taskId}/position")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskPosition(
+            @PathVariable String taskId,
+            @RequestParam(required = false) Long backlogPosition,
+            @RequestParam(required = false) Long boardPosition) {
+        return success(taskService.updateTaskPosition(taskId, backlogPosition, boardPosition), "Cập nhật vị trí thành công");
+    }
 }
+
