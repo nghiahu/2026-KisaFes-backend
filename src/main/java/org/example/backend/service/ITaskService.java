@@ -9,6 +9,7 @@ import org.example.backend.dto.response.PageResponse;
 
 public interface ITaskService {
     PageResponse<TaskResponse> getTasksByProjectId(TaskSearchRequest request);
+    PageResponse<TaskResponse> getMyTasks(org.example.backend.dto.request.TaskFilter filter);
     TaskResponse createTask(AddTaskRequest request);
     TaskResponse updateTaskStatus(String taskId, String statusId);
     TaskResponse updateTaskAssignee(String taskId, String assigneeId);

@@ -31,6 +31,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.context.ApplicationEventPublisher;
+import org.example.backend.event.NotificationEvent;
+import org.example.backend.entity.NotificationType;
+import org.example.backend.entity.NotificationStatus;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -43,6 +48,7 @@ public class TaskServiceImpl implements ITaskService {
     private final IUserRepository userRepository;
     private final IActivityRepository activityRepository;
     private final IProjectService projectService;
+    private final ApplicationEventPublisher eventPublisher;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     private void broadcastTaskEvent(String projectId, String type, Object data) {
@@ -81,6 +87,48 @@ public class TaskServiceImpl implements ITaskService {
 
         List<TaskResponse> responses = taskPage.getContent().stream()
                 .map(task -> mapToResponse(task, project, users))
+                .collect(Collectors.toList());
+
+        return PageResponse.<TaskResponse>builder()
+                .content(responses)
+                .page(taskPage.getNumber() + 1)
+                .size(taskPage.getSize())
+                .totalElements(taskPage.getTotalElements())
+                .totalPages(taskPage.getTotalPages())
+                .build();
+    }
+
+    @Override
+    public PageResponse<TaskResponse> getMyTasks(org.example.backend.dto.request.TaskFilter filter) {
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        filter.setAssigneeId(userDetails.getUserId());
+
+        int pageIndex = Math.max(0, filter.getPage() - 1);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(pageIndex, filter.getSize(), org.springframework.data.domain.Sort.Direction.fromString(filter.getSortDirection()), filter.getSortBy());
+
+        Page<Task> taskPage = taskRepository.findMyTasks(filter, pageable);
+        List<User> users = userRepository.findAll(); // Assuming this is cached or we can batch query users too, for simplicity using existing method
+
+        java.util.Set<String> projectIds = taskPage.getContent().stream()
+                .map(Task::getProjectId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        List<Project> projects = projectIds.isEmpty() ? new java.util.ArrayList<>() : projectRepository.findAllById(projectIds);
+        java.util.Map<String, Project> projectMap = projects.stream().collect(Collectors.toMap(Project::getId, p -> p));
+
+        List<TaskResponse> responses = taskPage.getContent().stream()
+                .map(task -> {
+                    Project project = projectMap.get(task.getProjectId());
+                    if (project == null) {
+                        project = new Project();
+                        project.setName("Unknown Project");
+                        project.setCode("UNK");
+                    }
+                    TaskResponse res = mapToResponse(task, project, users);
+                    res.setProjectName(project.getName());
+                    res.setProjectCode(project.getCode());
+                    return res;
+                })
                 .collect(Collectors.toList());
 
         return PageResponse.<TaskResponse>builder()
@@ -136,6 +184,19 @@ public class TaskServiceImpl implements ITaskService {
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
         broadcastTaskEvent(project.getId(), "CREATE_TASK", response);
+
+        // Phát sự kiện giao việc (nếu người được giao khác người tạo)
+        if (saved.getAssigneeId() != null && !saved.getAssigneeId().equals("Unassigned") && !saved.getAssigneeId().equals(currentUserId)) {
+            NotificationEvent assignmentEvent = new NotificationEvent(this,
+                    saved.getAssigneeId(),
+                    currentUserId,
+                    project.getId(),
+                    String.format("%s đã giao cho bạn công việc: [%s] %s", userDetails.getUsername(), saved.getTaskKey(), saved.getTitle()),
+                    NotificationType.ASSIGNMENT,
+                    NotificationStatus.PENDING);
+            eventPublisher.publishEvent(assignmentEvent);
+        }
+
         return response;
     }
 
@@ -180,6 +241,22 @@ public class TaskServiceImpl implements ITaskService {
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
         broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+
+        // Phát sự kiện thông báo nếu Task được chuyển sang trạng thái "Done" / Hoàn thành
+        if (newStatusLabel.toLowerCase().contains("done") || newStatusLabel.toLowerCase().contains("hoàn thành")) {
+            // Thông báo cho người tạo task (Reporter) nếu họ không phải là người đang đổi trạng thái
+            if (saved.getReporterId() != null && !saved.getReporterId().equals(userDetails.getUserId())) {
+                NotificationEvent statusEvent = new NotificationEvent(this,
+                        saved.getReporterId(),
+                        userDetails.getUserId(),
+                        project.getId(),
+                        String.format("%s đã hoàn thành công việc: [%s] %s", userDetails.getUsername(), saved.getTaskKey(), saved.getTitle()),
+                        NotificationType.SUCCESS,
+                        NotificationStatus.PENDING);
+                eventPublisher.publishEvent(statusEvent);
+            }
+        }
+
         return response;
     }
 
@@ -219,6 +296,19 @@ public class TaskServiceImpl implements ITaskService {
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
         broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+
+        // Phát sự kiện giao việc (nếu assignee mới hợp lệ và khác người đang thao tác)
+        if (saved.getAssigneeId() != null && !saved.getAssigneeId().equals("Unassigned") && !saved.getAssigneeId().equals(userDetails.getUserId())) {
+            NotificationEvent assignmentEvent = new NotificationEvent(this,
+                    saved.getAssigneeId(),
+                    userDetails.getUserId(),
+                    project.getId(),
+                    String.format("%s đã chuyển giao cho bạn công việc: [%s] %s", userDetails.getUsername(), saved.getTaskKey(), saved.getTitle()),
+                    NotificationType.ASSIGNMENT,
+                    NotificationStatus.PENDING);
+            eventPublisher.publishEvent(assignmentEvent);
+        }
+
         return response;
     }
 

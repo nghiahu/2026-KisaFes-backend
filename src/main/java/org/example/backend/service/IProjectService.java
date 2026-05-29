@@ -20,4 +20,5 @@ public interface IProjectService {
     Project.ProjectRole updateCustomRole(String projectId, String roleId, org.example.backend.dto.request.UpdateProjectRoleRequest request);
     boolean hasPermission(String projectId, String userId, org.example.backend.entity.Permission permission);
     ProjectResponse updateProjectName(String projectId, org.example.backend.dto.request.UpdateProjectNameRequest request);
+    ProjectResponse updateProjectInfo(String projectId, org.example.backend.dto.request.UpdateProjectInfoRequest request);
 }

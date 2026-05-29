@@ -9,6 +9,8 @@ public class TaskResponse {
     private String id;
     private String taskKey;
     private String projectId;
+    private String projectName;
+    private String projectCode;
     private String sprintId;
     private String title;
     private String description;

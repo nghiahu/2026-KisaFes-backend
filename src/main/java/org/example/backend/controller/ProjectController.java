@@ -59,6 +59,13 @@ public class ProjectController extends BaseController {
         return success(projectService.updateProjectName(id, request), "Đã cập nhật tên dự án");
     }
 
+    @PutMapping("/{id}/info")
+    public ResponseEntity<ResponseWrapper<ProjectResponse>> updateProjectInfo(
+            @PathVariable String id,
+            @Valid @RequestBody org.example.backend.dto.request.UpdateProjectInfoRequest request) {
+        return success(projectService.updateProjectInfo(id, request), "Đã cập nhật thông tin dự án");
+    }
+
     @PostMapping("/{id}/invite")
     public ResponseEntity<ResponseWrapper<Void>> inviteMember(
             @PathVariable String id,

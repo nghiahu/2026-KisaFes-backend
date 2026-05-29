@@ -21,4 +21,5 @@ public class Notification extends BaseEntity {
     private String message;     // Nội dung thông điệp
     private NotificationType type;
     private NotificationStatus status;
+    private boolean isRead;
 }

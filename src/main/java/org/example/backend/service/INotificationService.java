@@ -7,4 +7,6 @@ public interface INotificationService {
     List<NotificationResponse> getMyNotifications();
     NotificationResponse acceptInvitation(String id);
     NotificationResponse declineInvitation(String id);
+    NotificationResponse markAsRead(String id);
+    void markAllAsRead();
 }

@@ -70,4 +70,47 @@ public class ITaskRepositoryCustomImpl implements ITaskRepositoryCustom {
 
         return new PageImpl<>(tasks, pageable, total);
     }
+
+    @Override
+    public Page<Task> findMyTasks(org.example.backend.dto.request.TaskFilter filter, Pageable pageable) {
+        Query query = new Query();
+
+        if (filter.getAssigneeId() != null && !filter.getAssigneeId().trim().isEmpty()) {
+            query.addCriteria(Criteria.where("assigneeId").is(filter.getAssigneeId()));
+        }
+
+        if (filter.getProjectId() != null && !filter.getProjectId().trim().isEmpty()) {
+            query.addCriteria(Criteria.where("projectId").is(filter.getProjectId()));
+        }
+
+        if (filter.getStatusId() != null && !filter.getStatusId().trim().isEmpty()) {
+            query.addCriteria(Criteria.where("statusId").is(filter.getStatusId()));
+        }
+
+        if (filter.getPriority() != null && !filter.getPriority().trim().isEmpty()) {
+            query.addCriteria(Criteria.where("priority").is(filter.getPriority()));
+        }
+
+        if (filter.getKeyword() != null && !filter.getKeyword().trim().isEmpty()) {
+            Criteria keywordCriteria = new Criteria().orOperator(
+                    Criteria.where("title").regex(filter.getKeyword(), "i"),
+                    Criteria.where("taskKey").regex(filter.getKeyword(), "i")
+            );
+            query.addCriteria(keywordCriteria);
+        }
+
+        if (filter.getOverdue() != null && filter.getOverdue()) {
+            query.addCriteria(Criteria.where("dueDate").lt(java.time.LocalDateTime.now()));
+        } else if (filter.getDueToday() != null && filter.getDueToday()) {
+            java.time.LocalDateTime startOfDay = java.time.LocalDate.now().atStartOfDay();
+            java.time.LocalDateTime endOfDay = java.time.LocalDate.now().atTime(23, 59, 59);
+            query.addCriteria(Criteria.where("dueDate").gte(startOfDay).lte(endOfDay));
+        }
+
+        long total = mongoTemplate.count(query, Task.class);
+        query.with(pageable);
+        List<Task> tasks = mongoTemplate.find(query, Task.class);
+
+        return new PageImpl<>(tasks, pageable, total);
+    }
 }

@@ -31,4 +31,15 @@ public class NotificationController extends BaseController {
     public ResponseEntity<ResponseWrapper<NotificationResponse>> declineInvitation(@PathVariable String id) {
         return success(notificationService.declineInvitation(id), "Từ chối lời mời thành công");
     }
+
+    @PostMapping("/{id}/read")
+    public ResponseEntity<ResponseWrapper<NotificationResponse>> markAsRead(@PathVariable String id) {
+        return success(notificationService.markAsRead(id), "Đã đọc thông báo");
+    }
+
+    @PostMapping("/read-all")
+    public ResponseEntity<ResponseWrapper<Void>> markAllAsRead() {
+        notificationService.markAllAsRead();
+        return success(null, "Đã đọc tất cả thông báo");
+    }
 }

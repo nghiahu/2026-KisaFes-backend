@@ -138,4 +138,57 @@ public class NotificationServiceImpl implements INotificationService {
 
         return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName);
     }
+
+    @Override
+    @Transactional
+    public NotificationResponse markAsRead(String id) {
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String currentUserId = userDetails.getUserId();
+
+        Notification notification = notificationRepository.findById(id)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy thông báo"));
+
+        if (!notification.getRecipientId().equals(currentUserId)) {
+            throw new CustomBusinessException(ErrorCode.FORBIDDEN, "Bạn không có quyền thực hiện hành động này");
+        }
+
+        if (!notification.isRead()) {
+            notification.setRead(true);
+        }
+
+        Notification savedNotification = notificationRepository.save(notification);
+
+        Project project = null;
+        if (notification.getProjectId() != null) {
+            project = projectRepository.findById(notification.getProjectId()).orElse(null);
+        }
+        String projectName = project != null ? project.getName() : null;
+
+        User sender = null;
+        if (notification.getSenderId() != null) {
+            sender = userRepository.findById(notification.getSenderId()).orElse(null);
+        }
+        String senderName = sender != null ? sender.getFullName() : "Hệ thống";
+        String senderAvatar = sender != null ? sender.getAvatar() : null;
+
+        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName);
+    }
+
+    @Override
+    @Transactional
+    public void markAllAsRead() {
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String currentUserId = userDetails.getUserId();
+
+        List<Notification> unreadNotifications = notificationRepository.findByRecipientIdOrderByCreatedAtDesc(currentUserId)
+                .stream().filter(n -> !n.isRead()).toList();
+
+        for (Notification notification : unreadNotifications) {
+            notification.setRead(true);
+        }
+        
+        if (!unreadNotifications.isEmpty()) {
+            notificationRepository.saveAll(unreadNotifications);
+        }
+    }
 }

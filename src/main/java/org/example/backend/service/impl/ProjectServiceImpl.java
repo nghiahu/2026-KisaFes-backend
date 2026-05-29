@@ -10,6 +10,8 @@ import org.example.backend.entity.*;
 import org.example.backend.repository.*;
 import org.example.backend.security.principle.MyUserDetails;
 import org.example.backend.service.IProjectService;
+import org.springframework.context.ApplicationEventPublisher;
+import org.example.backend.event.NotificationEvent;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +28,7 @@ public class ProjectServiceImpl implements IProjectService {
     private final IProjectRepository projectRepository;
     private final IProjectMemberRepository projectMemberRepository;
     private final IUserRepository userRepository;
-    private final INotificationRepository notificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final ISprintRepository sprintRepository;
     private final ITaskRepository taskRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
@@ -141,15 +143,14 @@ public class ProjectServiceImpl implements IProjectService {
                 User recipient = userRepository.findByEmail(email)
                         .orElseThrow(() -> new CustomBusinessException(ErrorCode.USER_NOT_FOUND, "Người dùng với email " + email + " không tồn tại"));
 
-                Notification invitation = Notification.builder()
-                        .recipientId(recipient.getId())
-                        .senderId(ownerId)
-                        .projectId(savedProject.getId())
-                        .message(String.format("Bạn đã được mời tham gia dự án '%s' bởi %s.", savedProject.getName(), userDetails.getUsername()))
-                        .type(NotificationType.INVITATION)
-                        .status(NotificationStatus.PENDING)
-                        .build();
-                notificationRepository.save(invitation);
+                NotificationEvent invitationEvent = new NotificationEvent(this,
+                        recipient.getId(),
+                        ownerId,
+                        savedProject.getId(),
+                        String.format("Bạn đã được mời tham gia dự án '%s' bởi %s.", savedProject.getName(), userDetails.getUsername()),
+                        NotificationType.INVITATION,
+                        NotificationStatus.PENDING);
+                eventPublisher.publishEvent(invitationEvent);
             }
         }
 
@@ -165,68 +166,6 @@ public class ProjectServiceImpl implements IProjectService {
             sprint.setEndDate(LocalDateTime.now().plusDays(14));
             Sprint savedSprint = sprintRepository.save(sprint);
 
-            String sprintId = savedSprint.getId();
-            List<Project.ProjectStatus> statuses = savedProject.getStatuses();
-            
-            String toDoId = statuses.get(0).getStatusId();
-            String inProgressId = statuses.size() > 1 ? statuses.get(1).getStatusId() : toDoId;
-            String doneId = statuses.get(statuses.size() - 1).getStatusId();
-
-            Task task1 = new Task();
-            task1.setTaskKey(savedProject.getCode() + "-1");
-            task1.setProjectId(savedProject.getId());
-            task1.setSprintId(sprintId);
-            task1.setTitle("Khảo sát yêu cầu & Thiết kế Database");
-            task1.setDescription("Làm việc với các bên liên quan để làm rõ sơ đồ cơ sở dữ liệu và yêu cầu chức năng cốt lõi.");
-            task1.setStatusId(doneId);
-            task1.setPriority("High");
-            task1.setStoryPoints(5);
-            task1.setAssigneeId(ownerId);
-            task1.setReporterId(ownerId);
-            task1.setType(TaskType.STORY);
-            taskRepository.save(task1);
-
-            Task task2 = new Task();
-            task2.setTaskKey(savedProject.getCode() + "-2");
-            task2.setProjectId(savedProject.getId());
-            task2.setSprintId(sprintId);
-            task2.setTitle("Cài đặt khung dự án & Cấu hình Docker");
-            task2.setDescription("Khởi tạo mã nguồn cấu trúc thư mục tiêu chuẩn, thiết lập tệp Dockerfile và docker-compose.yml.");
-            task2.setStatusId(inProgressId);
-            task2.setPriority("Medium");
-            task2.setStoryPoints(3);
-            task2.setAssigneeId(ownerId);
-            task2.setReporterId(ownerId);
-            task2.setType(TaskType.STORY);
-            taskRepository.save(task2);
-
-            Task task3 = new Task();
-            task3.setTaskKey(savedProject.getCode() + "-3");
-            task3.setProjectId(savedProject.getId());
-            task3.setSprintId(sprintId);
-            task3.setTitle("Phát triển mô đun xác thực OAuth2 & Redis");
-            task3.setDescription("Xây dựng bộ lọc Spring Security, kết nối Redis cache để tối ưu hóa truy vấn phiên đăng nhập.");
-            task3.setStatusId(toDoId);
-            task3.setPriority("High");
-            task3.setStoryPoints(8);
-            task3.setAssigneeId(ownerId);
-            task3.setReporterId(ownerId);
-            task3.setType(TaskType.STORY);
-            taskRepository.save(task3);
-
-            Task task4 = new Task();
-            task4.setTaskKey(savedProject.getCode() + "-4");
-            task4.setProjectId(savedProject.getId());
-            task4.setSprintId(sprintId);
-            task4.setTitle("Viết tài liệu hướng dẫn REST API Swagger");
-            task4.setDescription("Tích hợp thư viện OpenAPI/Swagger, viết mô tả cho các endpoint đăng ký, đăng nhập và quản lý dự án.");
-            task4.setStatusId(toDoId);
-            task4.setPriority("Low");
-            task4.setStoryPoints(2);
-            task4.setAssigneeId(ownerId);
-            task4.setReporterId(ownerId);
-            task4.setType(TaskType.TASK);
-            taskRepository.save(task4);
         }
 
         ProjectResponse response = ProjectResponse.fromEntity(savedProject);
@@ -383,16 +322,15 @@ public class ProjectServiceImpl implements IProjectService {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Người dùng này đã là thành viên của dự án");
         }
 
-        Notification invitation = Notification.builder()
-                .recipientId(recipient.getId())
-                .senderId(userDetails.getUserId())
-                .projectId(projectId)
-                .message(String.format("Bạn đã được mời tham gia dự án '%s' bởi %s.", project.getName(), userDetails.getUsername()))
-                .type(NotificationType.INVITATION)
-                .status(NotificationStatus.PENDING)
-                .build();
+        NotificationEvent invitationEvent = new NotificationEvent(this,
+                recipient.getId(),
+                userDetails.getUserId(),
+                projectId,
+                String.format("Bạn đã được mời tham gia dự án '%s' bởi %s.", project.getName(), userDetails.getUsername()),
+                NotificationType.INVITATION,
+                NotificationStatus.PENDING);
         
-        notificationRepository.save(invitation);
+        eventPublisher.publishEvent(invitationEvent);
     }
 
     @Override
@@ -635,6 +573,29 @@ public class ProjectServiceImpl implements IProjectService {
         }
 
         project.setName(request.getName().trim());
+        projectRepository.save(project);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
+
+        ProjectResponse response = ProjectResponse.fromEntity(project);
+        populateProjectMetrics(response, project);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public ProjectResponse updateProjectInfo(String projectId, org.example.backend.dto.request.UpdateProjectInfoRequest request) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.PROJECT_UPDATE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền chỉnh sửa dự án này");
+        }
+
+        project.setName(request.getName().trim());
+        project.setDescription(request.getDescription() != null ? request.getDescription().trim() : "");
+        project.setCategoryId(request.getCategoryId());
+
         projectRepository.save(project);
         broadcastProjectEvent(projectId, "UPDATE_PROJECT");
 

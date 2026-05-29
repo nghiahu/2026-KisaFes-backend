@@ -45,6 +45,33 @@ public class TaskController extends BaseController {
         return success(taskService.getTasksByProjectId(request));
     }
 
+    @GetMapping("/my-tasks")
+    public ResponseEntity<ResponseWrapper<PageResponse<TaskResponse>>> getMyTasks(
+            @RequestParam(required = false) String projectId,
+            @RequestParam(required = false) String statusId,
+            @RequestParam(required = false) String priority,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean overdue,
+            @RequestParam(required = false) Boolean dueToday,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDirection
+    ) {
+        org.example.backend.dto.request.TaskFilter filter = new org.example.backend.dto.request.TaskFilter();
+        filter.setProjectId(projectId);
+        filter.setStatusId(statusId);
+        filter.setPriority(priority);
+        filter.setKeyword(keyword);
+        filter.setOverdue(overdue);
+        filter.setDueToday(dueToday);
+        filter.setPage(page);
+        filter.setSize(size);
+        filter.setSortBy(sortBy);
+        filter.setSortDirection(sortDirection);
+        return success(taskService.getMyTasks(filter));
+    }
+
     @PostMapping
     public ResponseEntity<ResponseWrapper<TaskResponse>> createTask(@Valid @RequestBody AddTaskRequest request) {
         return created(taskService.createTask(request), "Tạo công việc thành công");

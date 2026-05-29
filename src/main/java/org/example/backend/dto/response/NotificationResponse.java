@@ -19,6 +19,7 @@ public class NotificationResponse {
     private String message;
     private NotificationType type;
     private NotificationStatus status;
+    private boolean isRead;
     private LocalDateTime createdAt;
 
     public static NotificationResponse fromEntity(Notification notification, String senderName, String senderAvatar, String projectName) {
@@ -33,6 +34,7 @@ public class NotificationResponse {
         response.setMessage(notification.getMessage());
         response.setType(notification.getType());
         response.setStatus(notification.getStatus());
+        response.setRead(notification.isRead());
         response.setCreatedAt(notification.getCreatedAt());
         return response;
     }
