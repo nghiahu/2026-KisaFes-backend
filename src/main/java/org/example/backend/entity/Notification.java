@@ -18,6 +18,7 @@ public class Notification extends BaseEntity {
     private String recipientId; // Người nhận thông báo
     private String senderId;    // Người gửi lời mời (Chủ dự án)
     private String projectId;   // ID của dự án được mời
+    private String teamId;      // ID của nhóm được mời (nếu là lời mời nhóm)
     private String message;     // Nội dung thông điệp
     private NotificationType type;
     private NotificationStatus status;

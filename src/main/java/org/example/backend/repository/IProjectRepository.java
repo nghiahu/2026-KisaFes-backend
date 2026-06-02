@@ -9,4 +9,7 @@ import java.util.Optional;
 @Repository
 public interface IProjectRepository extends MongoRepository<Project, String> {
     Optional<Project> findByCode(String code);
+
+    @org.springframework.data.mongodb.repository.Query("{ 'teams.teamId': { $in: ?0 } }")
+    java.util.List<Project> findProjectsByTeamIds(java.util.List<String> teamIds);
 }

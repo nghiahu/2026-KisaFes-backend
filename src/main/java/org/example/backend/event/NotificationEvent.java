@@ -11,6 +11,7 @@ public class NotificationEvent extends ApplicationEvent {
     private final String recipientId;
     private final String senderId;
     private final String projectId;
+    private final String teamId;
     private final String message;
     private final NotificationType type;
     private final NotificationStatus status;
@@ -20,6 +21,18 @@ public class NotificationEvent extends ApplicationEvent {
         this.recipientId = recipientId;
         this.senderId = senderId;
         this.projectId = projectId;
+        this.teamId = null;
+        this.message = message;
+        this.type = type;
+        this.status = status;
+    }
+
+    public NotificationEvent(Object source, String recipientId, String senderId, String projectId, String teamId, String message, NotificationType type, NotificationStatus status) {
+        super(source);
+        this.recipientId = recipientId;
+        this.senderId = senderId;
+        this.projectId = projectId;
+        this.teamId = teamId;
         this.message = message;
         this.type = type;
         this.status = status;

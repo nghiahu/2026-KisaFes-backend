@@ -9,6 +9,8 @@ import org.example.backend.dto.response.TaskResponse;
 import org.example.backend.service.ITaskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 import java.util.List;
 import org.example.backend.dto.request.TaskSearchRequest;
@@ -89,6 +91,27 @@ public class TaskController extends BaseController {
             @PathVariable String taskId,
             @RequestParam(required = false) String assigneeId) {
         return success(taskService.updateTaskAssignee(taskId, assigneeId), "Cập nhật người thực hiện thành công");
+    }
+
+    @PatchMapping("/{id}/team")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> updateTaskTeam(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> request) {
+        return success(taskService.updateTaskTeam(id, request.get("teamId")), "Cập nhật nhóm thành công");
+    }
+
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> uploadTaskAttachment(
+            @PathVariable String id,
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return success(taskService.uploadTaskAttachment(id, file), "Tải tệp đính kèm thành công");
+    }
+
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    public ResponseEntity<ResponseWrapper<TaskResponse>> deleteTaskAttachment(
+            @PathVariable String id,
+            @PathVariable String attachmentId) {
+        return success(taskService.deleteTaskAttachment(id, attachmentId), "Xóa tệp đính kèm thành công");
     }
 
     @PatchMapping("/{taskId}/priority")

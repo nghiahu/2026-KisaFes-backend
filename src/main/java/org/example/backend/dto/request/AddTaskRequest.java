@@ -20,4 +20,5 @@ public class AddTaskRequest {
     private String assigneeId;
     private String type = "task"; // "story" | "task" | "bug"
     private java.time.LocalDateTime dueDate;
+    private String teamId;
 }

@@ -23,6 +23,29 @@ public class NotificationServiceImpl implements INotificationService {
     private final IProjectRepository projectRepository;
     private final IProjectMemberRepository projectMemberRepository;
     private final IUserRepository userRepository;
+    private final ITeamRepository teamRepository;
+    private final ITeamMemberRepository teamMemberRepository;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+
+    private void broadcastProjectUpdate(String teamId) {
+        try {
+            java.util.List<Project> projects = projectRepository.findProjectsByTeamIds(java.util.Collections.singletonList(teamId));
+            for (Project p : projects) {
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("type", "UPDATE_PROJECT");
+                payload.put("data", null);
+                messagingTemplate.convertAndSend("/topic/project/" + p.getId(), (Object) payload);
+            }
+            
+            // Also broadcast UPDATE_TEAM so TeamDetail.tsx can listen to it
+            java.util.Map<String, Object> teamPayload = new java.util.HashMap<>();
+            teamPayload.put("type", "UPDATE_TEAM");
+            teamPayload.put("data", null);
+            messagingTemplate.convertAndSend("/topic/team/" + teamId, (Object) teamPayload);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     @Override
     public List<NotificationResponse> getMyNotifications() {
@@ -50,7 +73,15 @@ public class NotificationServiceImpl implements INotificationService {
                 }
             }
 
-            return NotificationResponse.fromEntity(n, senderName, senderAvatar, projectName);
+            String teamName = null;
+            if (n.getTeamId() != null) {
+                Team team = teamRepository.findById(n.getTeamId()).orElse(null);
+                if (team != null) {
+                    teamName = team.getName();
+                }
+            }
+
+            return NotificationResponse.fromEntity(n, senderName, senderAvatar, projectName, teamName);
         }).toList();
     }
 
@@ -71,29 +102,55 @@ public class NotificationServiceImpl implements INotificationService {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Lời mời không hợp lệ hoặc đã được xử lý");
         }
 
-        Project project = projectRepository.findById(notification.getProjectId())
-                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án tương ứng"));
+        String resolvedProjectName = null;
+        String resolvedTeamName = null;
 
-        // Kiểm tra xem user đã là member chưa
-        boolean alreadyMember = projectMemberRepository.findByProjectId(project.getId()).stream()
-                .anyMatch(m -> m.getUserId().equals(currentUserId));
+        if (notification.getProjectId() != null) {
+            Project project = projectRepository.findById(notification.getProjectId())
+                    .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án tương ứng"));
+            resolvedProjectName = project.getName();
 
-        if (!alreadyMember) {
-            // Tạo ProjectMember mới
-            ProjectMember member = new ProjectMember();
-            member.setProjectId(project.getId());
-            member.setUserId(currentUserId);
-            member.setJoinedAt(LocalDateTime.now());
+            // Kiểm tra xem user đã là member chưa
+            boolean alreadyMember = projectMemberRepository.findByProjectId(project.getId()).stream()
+                    .anyMatch(m -> m.getUserId().equals(currentUserId));
 
-            // Gán role mặc định (developer/member) nếu có
-            if (project.getCustomRoles() != null) {
-                project.getCustomRoles().stream()
-                        .filter(r -> r.getName().toLowerCase().contains("developer") || r.getName().toLowerCase().contains("member"))
-                        .findFirst()
-                        .ifPresent(r -> member.setRoleId(r.getId()));
+            if (!alreadyMember) {
+                // Tạo ProjectMember mới
+                ProjectMember member = new ProjectMember();
+                member.setProjectId(project.getId());
+                member.setUserId(currentUserId);
+                member.setJoinedAt(LocalDateTime.now());
+
+                // Gán role mặc định (developer/member) nếu có
+                if (project.getCustomRoles() != null) {
+                    project.getCustomRoles().stream()
+                            .filter(r -> r.getName().toLowerCase().contains("developer") || r.getName().toLowerCase().contains("member"))
+                            .findFirst()
+                            .ifPresent(r -> member.setRoleId(r.getId()));
+                }
+
+                projectMemberRepository.save(member);
             }
+        } else if (notification.getTeamId() != null) {
+            Team team = teamRepository.findById(notification.getTeamId())
+                    .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhóm tương ứng"));
+            resolvedTeamName = team.getName();
 
-            projectMemberRepository.save(member);
+            boolean alreadyMember = teamMemberRepository.findByTeamId(team.getId()).stream()
+                    .anyMatch(m -> m.getUserId().equals(currentUserId));
+            
+            if (!alreadyMember) {
+                TeamMember member = new TeamMember();
+                member.setTeamId(team.getId());
+                member.setUserId(currentUserId);
+                member.setRole("MEMBER");
+                member.setJoinedAt(LocalDateTime.now());
+                teamMemberRepository.save(member);
+                
+                broadcastProjectUpdate(team.getId());
+            }
+        } else {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Lời mời không hợp lệ (không chứa projectId hoặc teamId)");
         }
 
         // Cập nhật trạng thái thông báo thành ACCEPTED
@@ -105,7 +162,7 @@ public class NotificationServiceImpl implements INotificationService {
         String senderName = sender != null ? sender.getFullName() : "Hệ thống";
         String senderAvatar = sender != null ? sender.getAvatar() : null;
 
-        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, project.getName());
+        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, resolvedProjectName, resolvedTeamName);
     }
 
     @Override
@@ -129,14 +186,23 @@ public class NotificationServiceImpl implements INotificationService {
         notification.setStatus(NotificationStatus.DECLINED);
         Notification savedNotification = notificationRepository.save(notification);
 
-        Project project = projectRepository.findById(notification.getProjectId()).orElse(null);
-        String projectName = project != null ? project.getName() : null;
+        String projectName = null;
+        if (notification.getProjectId() != null) {
+            Project project = projectRepository.findById(notification.getProjectId()).orElse(null);
+            projectName = project != null ? project.getName() : null;
+        }
+        
+        String teamName = null;
+        if (notification.getTeamId() != null) {
+            Team team = teamRepository.findById(notification.getTeamId()).orElse(null);
+            teamName = team != null ? team.getName() : null;
+        }
 
         User sender = userRepository.findById(notification.getSenderId()).orElse(null);
         String senderName = sender != null ? sender.getFullName() : "Hệ thống";
         String senderAvatar = sender != null ? sender.getAvatar() : null;
 
-        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName);
+        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName, teamName);
     }
 
     @Override
@@ -163,6 +229,11 @@ public class NotificationServiceImpl implements INotificationService {
             project = projectRepository.findById(notification.getProjectId()).orElse(null);
         }
         String projectName = project != null ? project.getName() : null;
+        String teamName = null;
+        if (notification.getTeamId() != null) {
+            Team team = teamRepository.findById(notification.getTeamId()).orElse(null);
+            teamName = team != null ? team.getName() : null;
+        }
 
         User sender = null;
         if (notification.getSenderId() != null) {
@@ -171,7 +242,7 @@ public class NotificationServiceImpl implements INotificationService {
         String senderName = sender != null ? sender.getFullName() : "Hệ thống";
         String senderAvatar = sender != null ? sender.getAvatar() : null;
 
-        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName);
+        return NotificationResponse.fromEntity(savedNotification, senderName, senderAvatar, projectName, teamName);
     }
 
     @Override

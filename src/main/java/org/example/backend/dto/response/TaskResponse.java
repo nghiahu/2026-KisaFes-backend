@@ -3,6 +3,7 @@ package org.example.backend.dto.response;
 import lombok.Data;
 import org.example.backend.entity.Resolution;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class TaskResponse {
@@ -35,4 +36,29 @@ public class TaskResponse {
     private String epicId;
     private Long backlogPosition;
     private Long boardPosition;
+
+    private String teamId;
+    private String teamName;
+
+    private List<AttachmentResponse> attachments;
+
+    @Data
+    public static class AttachmentResponse {
+        private String fileId;
+        private String fileName;
+        private String fileUrl;
+        private String uploadedBy;
+        private LocalDateTime uploadedAt;
+
+        public static AttachmentResponse fromEntity(org.example.backend.entity.Task.Attachment entity) {
+            if (entity == null) return null;
+            AttachmentResponse dto = new AttachmentResponse();
+            dto.setFileId(entity.getFileId());
+            dto.setFileName(entity.getFileName());
+            dto.setFileUrl(entity.getFileUrl());
+            dto.setUploadedBy(entity.getUploadedBy());
+            dto.setUploadedAt(entity.getUploadedAt());
+            return dto;
+        }
+    }
 }

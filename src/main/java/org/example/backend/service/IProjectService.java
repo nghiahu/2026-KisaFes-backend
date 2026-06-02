@@ -12,6 +12,7 @@ public interface IProjectService {
     ProjectResponse createProject(AddProjectRequest addProjectRequest);
     List<ProjectResponse> getAllProjects();
     ProjectResponse getProjectById(String id);
+    void deleteProject(String projectId);
     void inviteMember(String projectId, InviteMemberRequest request);
     void removeMember(String projectId, String userId);
     void restoreMember(String projectId, String userId);
@@ -21,4 +22,8 @@ public interface IProjectService {
     boolean hasPermission(String projectId, String userId, org.example.backend.entity.Permission permission);
     ProjectResponse updateProjectName(String projectId, org.example.backend.dto.request.UpdateProjectNameRequest request);
     ProjectResponse updateProjectInfo(String projectId, org.example.backend.dto.request.UpdateProjectInfoRequest request);
+
+    ProjectResponse addTeamToProject(String projectId, String teamId, String roleId);
+    void removeTeamFromProject(String projectId, String teamId);
+    List<org.example.backend.dto.response.TeamResponse> getProjectTeams(String projectId);
 }

@@ -31,6 +31,8 @@ public class ProjectServiceImpl implements IProjectService {
     private final ApplicationEventPublisher eventPublisher;
     private final ISprintRepository sprintRepository;
     private final ITaskRepository taskRepository;
+    private final ITeamMemberRepository teamMemberRepository;
+    private final ITeamRepository teamRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     private void broadcastProjectEvent(String projectId, String type) {
@@ -178,37 +180,27 @@ public class ProjectServiceImpl implements IProjectService {
         MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         String userId = userDetails.getUserId();
 
+        // 1. Lấy các dự án user là thành viên trực tiếp
         List<ProjectMember> memberships = projectMemberRepository.findByUserId(userId);
         List<String> projectIds = memberships.stream().map(ProjectMember::getProjectId).toList();
+        java.util.List<Project> projects = new java.util.ArrayList<>(projectRepository.findAllById(projectIds));
 
-        List<Project> projects = projectRepository.findAllById(projectIds);
+        // 2. Lấy các dự án user là thành viên qua nhóm
+        List<TeamMember> userTeams = teamMemberRepository.findByUserId(userId);
+        if (!userTeams.isEmpty()) {
+            List<String> teamIds = userTeams.stream().map(TeamMember::getTeamId).toList();
+            List<Project> teamProjects = projectRepository.findProjectsByTeamIds(teamIds);
+            
+            for (Project tp : teamProjects) {
+                if (projects.stream().noneMatch(p -> p.getId().equals(tp.getId()))) {
+                    projects.add(tp);
+                }
+            }
+        }
 
         return projects.stream().map(project -> {
             ProjectResponse response = ProjectResponse.fromEntity(project);
-            List<ProjectMember> members = projectMemberRepository.findByProjectId(project.getId());
-            List<String> memberUserIds = members.stream().map(ProjectMember::getUserId).toList();
-            
-            List<User> users = userRepository.findAllById(memberUserIds);
-            
-            response.setMembers(members.stream().map(m -> {
-                ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
-                mr.setId(m.getUserId());
-                mr.setActive(m.isActive());
-                users.stream().filter(u -> u.getId().equals(m.getUserId())).findFirst()
-                        .ifPresent(u -> {
-                            mr.setName(u.getFullName());
-                            mr.setAvatar(u.getAvatar());
-                        });
-                mr.setRoleId(m.getRoleId());
-                if (project.getCustomRoles() != null) {
-                    project.getCustomRoles().stream()
-                            .filter(r -> r.getId().equals(m.getRoleId()))
-                            .findFirst()
-                            .ifPresent(r -> mr.setRoleName(r.getName()));
-                }
-                return mr;
-            }).toList());
-            
+            response.setMembers(getProjectMembers(project));
             populateProjectMetrics(response, project);
             return response;
         }).toList();
@@ -220,31 +212,110 @@ public class ProjectServiceImpl implements IProjectService {
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         ProjectResponse response = ProjectResponse.fromEntity(project);
         
-        List<ProjectMember> members = projectMemberRepository.findByProjectId(project.getId());
-        List<String> memberUserIds = members.stream().map(ProjectMember::getUserId).toList();
-        List<User> users = userRepository.findAllById(memberUserIds);
-        
-        response.setMembers(members.stream().map(m -> {
-            ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
-            mr.setId(m.getUserId());
-            mr.setActive(m.isActive());
-            users.stream().filter(u -> u.getId().equals(m.getUserId())).findFirst()
-                    .ifPresent(u -> {
-                        mr.setName(u.getFullName());
-                        mr.setAvatar(u.getAvatar());
-                    });
-            mr.setRoleId(m.getRoleId());
-            if (project.getCustomRoles() != null) {
-                project.getCustomRoles().stream()
-                        .filter(r -> r.getId().equals(m.getRoleId()))
-                        .findFirst()
-                        .ifPresent(r -> mr.setRoleName(r.getName()));
-            }
-            return mr;
-        }).toList());
+        response.setMembers(getProjectMembers(project));
 
         populateProjectMetrics(response, project);
         return response;
+    }
+
+    @Override
+    @Transactional
+    public void deleteProject(String projectId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.PROJECT_DELETE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền xóa dự án này");
+        }
+
+        // Clean up tasks
+        List<Task> tasks = taskRepository.findByProjectId(projectId);
+        if (!tasks.isEmpty()) {
+            taskRepository.deleteAll(tasks);
+        }
+
+        // Clean up sprints
+        List<Sprint> sprints = sprintRepository.findByProjectId(projectId);
+        if (!sprints.isEmpty()) {
+            sprintRepository.deleteAll(sprints);
+        }
+
+        // Clean up members
+        List<ProjectMember> members = projectMemberRepository.findByProjectId(projectId);
+        if (!members.isEmpty()) {
+            projectMemberRepository.deleteAll(members);
+        }
+
+        projectRepository.deleteById(projectId);
+        broadcastProjectEvent(projectId, "DELETE_PROJECT");
+    }
+
+    private List<ProjectResponse.MemberResponse> getProjectMembers(Project project) {
+        List<ProjectMember> explicitMembers = projectMemberRepository.findByProjectId(project.getId());
+        java.util.Map<String, ProjectResponse.MemberResponse> memberMap = new java.util.HashMap<>();
+        
+        if (!explicitMembers.isEmpty()) {
+            List<String> explicitUserIds = explicitMembers.stream().map(ProjectMember::getUserId).toList();
+            List<User> explicitUsers = userRepository.findAllById(explicitUserIds);
+            
+            for (ProjectMember m : explicitMembers) {
+                ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
+                mr.setId(m.getUserId());
+                mr.setActive(m.isActive());
+                mr.setRoleId(m.getRoleId());
+                
+                explicitUsers.stream().filter(u -> u.getId().equals(m.getUserId())).findFirst()
+                        .ifPresent(u -> {
+                            mr.setName(u.getFullName());
+                            mr.setAvatar(u.getAvatar());
+                        });
+                        
+                if (project.getCustomRoles() != null) {
+                    project.getCustomRoles().stream()
+                            .filter(r -> r.getId().equals(m.getRoleId()))
+                            .findFirst()
+                            .ifPresent(r -> mr.setRoleName(r.getName()));
+                }
+                memberMap.put(m.getUserId(), mr);
+            }
+        }
+        
+        if (project.getTeams() != null && !project.getTeams().isEmpty()) {
+            for (Project.ProjectTeam pt : project.getTeams()) {
+                List<TeamMember> teamMembers = teamMemberRepository.findByTeamId(pt.getTeamId());
+                if (!teamMembers.isEmpty()) {
+                    List<String> teamUserIds = teamMembers.stream().map(TeamMember::getUserId).toList();
+                    List<User> teamUsers = userRepository.findAllById(teamUserIds);
+                    
+                    for (TeamMember tm : teamMembers) {
+                        if (!memberMap.containsKey(tm.getUserId())) {
+                            ProjectResponse.MemberResponse mr = new ProjectResponse.MemberResponse();
+                            mr.setId(tm.getUserId());
+                            mr.setActive(true);
+                            mr.setRoleId(pt.getRoleId());
+                            
+                            teamUsers.stream().filter(u -> u.getId().equals(tm.getUserId())).findFirst()
+                                    .ifPresent(u -> {
+                                        mr.setName(u.getFullName());
+                                        mr.setAvatar(u.getAvatar());
+                                    });
+                            
+                            if (project.getCustomRoles() != null) {
+                                project.getCustomRoles().stream()
+                                        .filter(r -> r.getId().equals(pt.getRoleId()))
+                                        .findFirst()
+                                        .ifPresent(r -> mr.setRoleName(r.getName() + " (Từ nhóm)"));
+                            }
+                            
+                            memberMap.put(tm.getUserId(), mr);
+                        }
+                    }
+                }
+            }
+        }
+        
+        return new ArrayList<>(memberMap.values());
     }
 
     private void populateProjectMetrics(ProjectResponse response, Project project) {
@@ -348,8 +419,18 @@ public class ProjectServiceImpl implements IProjectService {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể xóa chủ sở hữu khỏi dự án");
         }
 
-        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
-                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId).orElse(null);
+        if (member == null) {
+            if (project.getTeams() != null && !project.getTeams().isEmpty()) {
+                List<TeamMember> userTeams = teamMemberRepository.findByUserId(userId);
+                for (Project.ProjectTeam pt : project.getTeams()) {
+                    if (userTeams.stream().anyMatch(t -> t.getTeamId().equals(pt.getTeamId()))) {
+                        throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Người dùng này thuộc một nhóm được phân công vào dự án. Bạn phải xóa họ ở mức độ Nhóm thay vì cá nhân.");
+                    }
+                }
+            }
+            throw new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án");
+        }
 
         member.setActive(false);
         member.setRemovedAt(LocalDateTime.now());
@@ -409,8 +490,28 @@ public class ProjectServiceImpl implements IProjectService {
             throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Không thể thay đổi quyền của chủ sở hữu");
         }
 
-        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId)
-                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án"));
+        ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId).orElse(null);
+        if (member == null) {
+            boolean isTeamMember = false;
+            if (project.getTeams() != null && !project.getTeams().isEmpty()) {
+                List<TeamMember> userTeams = teamMemberRepository.findByUserId(userId);
+                for (Project.ProjectTeam pt : project.getTeams()) {
+                    if (userTeams.stream().anyMatch(t -> t.getTeamId().equals(pt.getTeamId()))) {
+                        isTeamMember = true;
+                        break;
+                    }
+                }
+            }
+            if (isTeamMember) {
+                member = new ProjectMember();
+                member.setProjectId(projectId);
+                member.setUserId(userId);
+                member.setJoinedAt(LocalDateTime.now());
+                member.setActive(true);
+            } else {
+                throw new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Thành viên không tồn tại trong dự án");
+            }
+        }
 
         boolean roleExists = false;
         if (project.getCustomRoles() != null) {
@@ -535,11 +636,21 @@ public class ProjectServiceImpl implements IProjectService {
         }
 
         ProjectMember member = projectMemberRepository.findByProjectIdAndUserId(projectId, userId).orElse(null);
-        if (member == null || !member.isActive()) {
-            return false;
+        String targetRoleId = null;
+        if (member != null && member.isActive()) {
+            targetRoleId = member.getRoleId();
         }
-
-        String targetRoleId = member.getRoleId();
+        
+        // If not found in individual members, check if user is in any team assigned to the project
+        if (targetRoleId == null && project.getTeams() != null && !project.getTeams().isEmpty()) {
+            List<TeamMember> userTeams = teamMemberRepository.findByUserId(userId);
+            for (Project.ProjectTeam pt : project.getTeams()) {
+                if (userTeams.stream().anyMatch(t -> t.getTeamId().equals(pt.getTeamId()))) {
+                    targetRoleId = pt.getRoleId();
+                    break;
+                }
+            }
+        }
 
         // Fallback: If member's roleId is null, resolve it to the first 'developer' or 'member' role in the project
         if (targetRoleId == null && project.getCustomRoles() != null) {
@@ -602,6 +713,80 @@ public class ProjectServiceImpl implements IProjectService {
         ProjectResponse response = ProjectResponse.fromEntity(project);
         populateProjectMetrics(response, project);
         return response;
+    }
+
+    @Transactional
+    public ProjectResponse addTeamToProject(String projectId, String teamId, String roleId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_INVITE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền mời thành viên/nhóm vào dự án này");
+        }
+
+        if (project.getTeams() == null) {
+            project.setTeams(new ArrayList<>());
+        }
+
+        if (project.getTeams().stream().anyMatch(t -> t.getTeamId().equals(teamId))) {
+            throw new CustomBusinessException(ErrorCode.VALIDATION_ERROR, "Nhóm này đã được gán vào dự án");
+        }
+
+        Project.ProjectTeam pt = new Project.ProjectTeam();
+        pt.setTeamId(teamId);
+        pt.setRoleId(roleId);
+        pt.setAssignedAt(LocalDateTime.now());
+        
+        project.getTeams().add(pt);
+        projectRepository.save(project);
+        broadcastProjectEvent(projectId, "UPDATE_PROJECT");
+        
+        ProjectResponse response = ProjectResponse.fromEntity(project);
+        populateProjectMetrics(response, project);
+        return response;
+    }
+
+    @Transactional
+    public void removeTeamFromProject(String projectId, String teamId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!hasPermission(projectId, userDetails.getUserId(), Permission.MEMBER_REMOVE)) {
+            throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền xóa thành viên/nhóm khỏi dự án này");
+        }
+
+        if (project.getTeams() != null) {
+            boolean removed = project.getTeams().removeIf(t -> t.getTeamId().equals(teamId));
+            if (removed) {
+                projectRepository.save(project);
+                broadcastProjectEvent(projectId, "UPDATE_PROJECT");
+            }
+        }
+    }
+
+    @Override
+    public List<org.example.backend.dto.response.TeamResponse> getProjectTeams(String projectId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        if (project.getTeams() == null || project.getTeams().isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> teamIds = project.getTeams().stream().map(Project.ProjectTeam::getTeamId).toList();
+        List<Team> teams = teamRepository.findAllById(teamIds);
+
+        return teams.stream()
+                .map(t -> org.example.backend.dto.response.TeamResponse.builder()
+                        .id(t.getId())
+                        .name(t.getName())
+                        .description(t.getDescription())
+                        .avatar(t.getAvatar())
+                        .coverImage(t.getCoverImage())
+                        .build())
+                .toList();
     }
 }
 

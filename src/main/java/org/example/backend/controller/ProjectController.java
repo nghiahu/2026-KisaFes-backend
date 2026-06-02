@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 
@@ -52,6 +55,12 @@ public class ProjectController extends BaseController {
         return success(projectService.getProjectById(id));
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ResponseWrapper<Void>> deleteProject(@PathVariable String id) {
+        projectService.deleteProject(id);
+        return success(null, "Xóa dự án thành công");
+    }
+
     @PatchMapping("/{id}/name")
     public ResponseEntity<ResponseWrapper<ProjectResponse>> updateProjectName(
             @PathVariable String id,
@@ -64,6 +73,27 @@ public class ProjectController extends BaseController {
             @PathVariable String id,
             @Valid @RequestBody org.example.backend.dto.request.UpdateProjectInfoRequest request) {
         return success(projectService.updateProjectInfo(id, request), "Đã cập nhật thông tin dự án");
+    }
+
+    @PostMapping("/{id}/teams")
+    public ResponseEntity<ResponseWrapper<ProjectResponse>> addTeamToProject(
+            @PathVariable String id,
+            @RequestParam String teamId,
+            @RequestParam(required = false) String roleId) {
+        return success(projectService.addTeamToProject(id, teamId, roleId), "Thêm nhóm vào dự án thành công");
+    }
+
+    @DeleteMapping("/{id}/teams/{teamId}")
+    public ResponseEntity<ResponseWrapper<Void>> removeTeamFromProject(
+            @PathVariable String id,
+            @PathVariable String teamId) {
+        projectService.removeTeamFromProject(id, teamId);
+        return success(null, "Xóa nhóm khỏi dự án thành công");
+    }
+
+    @GetMapping("/{id}/teams")
+    public ResponseEntity<ResponseWrapper<List<org.example.backend.dto.response.TeamResponse>>> getProjectTeams(@PathVariable String id) {
+        return success(projectService.getProjectTeams(id), "Lấy danh sách nhóm thành công");
     }
 
     @PostMapping("/{id}/invite")

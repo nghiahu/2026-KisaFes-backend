@@ -13,6 +13,7 @@ import org.example.backend.entity.Project;
 import org.example.backend.entity.Resolution;
 import org.example.backend.entity.Task;
 import org.example.backend.entity.SubTask;
+import org.example.backend.entity.TaskActivity;
 import org.example.backend.entity.TaskType;
 import org.example.backend.entity.User;
 import org.example.backend.entity.Activity;
@@ -23,12 +24,16 @@ import org.example.backend.repository.IProjectRepository;
 import org.example.backend.repository.ITaskRepository;
 import org.example.backend.repository.IUserRepository;
 import org.example.backend.repository.IActivityRepository;
+import org.example.backend.repository.ITaskActivityRepository;
 import org.example.backend.security.principle.MyUserDetails;
 import org.example.backend.service.ITaskService;
 import org.example.backend.service.IProjectService;
 import org.example.backend.entity.Permission;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.example.backend.service.CloudinaryService;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -46,7 +51,9 @@ public class TaskServiceImpl implements ITaskService {
     private final ITaskRepository taskRepository;
     private final IProjectRepository projectRepository;
     private final IUserRepository userRepository;
+    private final CloudinaryService cloudinaryService;
     private final IActivityRepository activityRepository;
+    private final ITaskActivityRepository taskActivityRepository;
     private final IProjectService projectService;
     private final ApplicationEventPublisher eventPublisher;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
@@ -72,6 +79,26 @@ public class TaskServiceImpl implements ITaskService {
             activity.setType(ActivityType.STATUS_CHANGE);
             activity.setContent(content);
             activityRepository.save(activity);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void logTaskActivity(Task task, TaskActivity.TaskActivityType actionType,
+                                  String field, String oldValue, String newValue) {
+        try {
+            MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            String currentUserId = userDetails.getUserId();
+            TaskActivity ta = new TaskActivity();
+            ta.setTaskId(task.getId());
+            ta.setProjectId(task.getProjectId());
+            ta.setSprintId(task.getSprintId());
+            ta.setUserId(currentUserId);
+            ta.setActionType(actionType);
+            ta.setField(field);
+            ta.setOldValue(oldValue);
+            ta.setNewValue(newValue);
+            taskActivityRepository.save(ta);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -172,7 +199,9 @@ public class TaskServiceImpl implements ITaskService {
         task.setPriority(request.getPriority());
         task.setStoryPoints(request.getStoryPoints());
         task.setAssigneeId(request.getAssigneeId() != null ? request.getAssigneeId() : "Unassigned");
-        task.setReporterId(currentUserId);
+        task.setReporterId(userDetails.getUserId());
+        task.setTeamId(request.getTeamId());
+        task.setCreatedAt(java.time.LocalDateTime.now());
         try {
             task.setType(request.getType() != null ? TaskType.valueOf(request.getType().toUpperCase()) : TaskType.TASK);
         } catch (IllegalArgumentException e) {
@@ -184,6 +213,9 @@ public class TaskServiceImpl implements ITaskService {
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
         broadcastTaskEvent(project.getId(), "CREATE_TASK", response);
+
+        // Log TaskActivity for Work Activity feed
+        logTaskActivity(saved, TaskActivity.TaskActivityType.CREATE_TASK, null, null, saved.getTitle());
 
         // Phát sự kiện giao việc (nếu người được giao khác người tạo)
         if (saved.getAssigneeId() != null && !saved.getAssigneeId().equals("Unassigned") && !saved.getAssigneeId().equals(currentUserId)) {
@@ -237,6 +269,7 @@ public class TaskServiceImpl implements ITaskService {
         }
 
         logActivity(taskId, "changed status from " + oldStatusLabel + " to " + newStatusLabel);
+        logTaskActivity(saved, TaskActivity.TaskActivityType.UPDATE_STATUS, "statusId", oldStatusLabel, newStatusLabel);
 
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
@@ -292,6 +325,7 @@ public class TaskServiceImpl implements ITaskService {
         }
 
         logActivity(taskId, "changed assignee from " + oldAssignee + " to " + newAssignee);
+        logTaskActivity(saved, TaskActivity.TaskActivityType.UPDATE_ASSIGNEE, "assigneeId", oldAssignee, newAssignee);
 
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
@@ -336,6 +370,7 @@ public class TaskServiceImpl implements ITaskService {
         Task saved = taskRepository.save(task);
 
         logActivity(taskId, "changed priority from " + (oldPriority != null ? oldPriority : "Medium") + " to " + priority);
+        logTaskActivity(saved, TaskActivity.TaskActivityType.UPDATE_PRIORITY, "priority", oldPriority, priority);
 
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
@@ -362,6 +397,9 @@ public class TaskServiceImpl implements ITaskService {
         Task saved = taskRepository.save(task);
 
         logActivity(taskId, "changed story points from " + (oldPoints != null ? oldPoints : "none") + " to " + (storyPoints != null ? storyPoints : "none"));
+        logTaskActivity(saved, TaskActivity.TaskActivityType.UPDATE_STORY_POINTS, "storyPoints",
+                oldPoints != null ? oldPoints.toString() : null,
+                storyPoints != null ? storyPoints.toString() : null);
 
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
@@ -470,6 +508,13 @@ public class TaskServiceImpl implements ITaskService {
         res.setEpicId(task.getEpicId());
         res.setBacklogPosition(task.getBacklogPosition());
         res.setBoardPosition(task.getBoardPosition());
+
+        res.setTeamId(task.getTeamId());
+        if (task.getAttachments() != null) {
+            res.setAttachments(task.getAttachments().stream()
+                    .map(TaskResponse.AttachmentResponse::fromEntity)
+                    .collect(Collectors.toList()));
+        }
 
         if (project.getStatuses() != null) {
             project.getStatuses().stream()
@@ -667,6 +712,7 @@ public class TaskServiceImpl implements ITaskService {
                 ? "moved task to backlog"
                 : "moved task to sprint " + sprintId;
         logActivity(taskId, logMsg);
+        logTaskActivity(saved, TaskActivity.TaskActivityType.MOVE_SPRINT, "sprintId", oldSprintId, sprintId);
 
         List<User> users = userRepository.findAll();
         TaskResponse response = mapToResponse(saved, project, users);
@@ -691,5 +737,88 @@ public class TaskServiceImpl implements ITaskService {
         TaskResponse response = mapToResponse(saved, project, users);
         broadcastTaskEvent(project.getId(), "TASK_REORDERED", response);
         return response;
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskTeam(String taskId, String teamId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        String oldTeamId = task.getTeamId();
+        task.setTeamId(teamId);
+        task.setUpdatedAt(java.time.LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+
+        logActivity(taskId, teamId != null ? "assigned team to task" : "removed team from task");
+        logTaskActivity(saved, TaskActivity.TaskActivityType.UPDATE_ASSIGNEE, "teamId", oldTeamId, teamId);
+
+        List<User> users = userRepository.findAll();
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse uploadTaskAttachment(String taskId, MultipartFile file) throws IOException {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        MyUserDetails userDetails = (MyUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        String fileUrl = cloudinaryService.uploadFile(file);
+        
+        Task.Attachment attachment = new Task.Attachment();
+        attachment.setFileId(java.util.UUID.randomUUID().toString());
+        attachment.setFileName(file.getOriginalFilename());
+        attachment.setFileUrl(fileUrl);
+        attachment.setUploadedBy(userDetails.getUserId());
+        
+        if (task.getAttachments() == null) {
+            task.setAttachments(new java.util.ArrayList<>());
+        }
+        task.getAttachments().add(attachment);
+        task.setUpdatedAt(java.time.LocalDateTime.now());
+        Task saved = taskRepository.save(task);
+
+        logActivity(taskId, "uploaded attachment " + file.getOriginalFilename());
+        
+        List<User> users = userRepository.findAll();
+        TaskResponse response = mapToResponse(saved, project, users);
+        broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse deleteTaskAttachment(String taskId, String attachmentId) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy công việc"));
+
+        Project project = projectRepository.findById(task.getProjectId())
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dự án"));
+
+        if (task.getAttachments() != null) {
+            task.getAttachments().removeIf(a -> a.getFileId().equals(attachmentId));
+            task.setUpdatedAt(java.time.LocalDateTime.now());
+            Task saved = taskRepository.save(task);
+            
+            logActivity(taskId, "deleted an attachment");
+
+            List<User> users = userRepository.findAll();
+            TaskResponse response = mapToResponse(saved, project, users);
+            broadcastTaskEvent(project.getId(), "UPDATE_TASK", response);
+            return response;
+        }
+        
+        List<User> users = userRepository.findAll();
+        return mapToResponse(task, project, users);
     }
 }

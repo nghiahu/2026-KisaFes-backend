@@ -9,6 +9,7 @@ import org.example.backend.common.base.BaseEntity;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,6 +41,18 @@ public class Project extends BaseEntity {
     private List<ProjectStatus> statuses;
     private List<BoardColumn> boardColumns;
     private List<ProjectRole> customRoles;
+    
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProjectTeam {
+        private String teamId;
+        private String roleId;
+        private java.time.LocalDateTime assignedAt;
+    }
+    
+    private List<ProjectTeam> teams = new ArrayList<>();
 
     private Set<String> favoriteBy = new HashSet<>();
 

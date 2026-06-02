@@ -16,6 +16,8 @@ public class NotificationResponse {
     private String senderAvatar;
     private String projectId;
     private String projectName;
+    private String teamId;
+    private String teamName;
     private String message;
     private NotificationType type;
     private NotificationStatus status;
@@ -23,6 +25,10 @@ public class NotificationResponse {
     private LocalDateTime createdAt;
 
     public static NotificationResponse fromEntity(Notification notification, String senderName, String senderAvatar, String projectName) {
+        return fromEntity(notification, senderName, senderAvatar, projectName, null);
+    }
+
+    public static NotificationResponse fromEntity(Notification notification, String senderName, String senderAvatar, String projectName, String teamName) {
         NotificationResponse response = new NotificationResponse();
         response.setId(notification.getId());
         response.setRecipientId(notification.getRecipientId());
@@ -31,6 +37,8 @@ public class NotificationResponse {
         response.setSenderAvatar(senderAvatar);
         response.setProjectId(notification.getProjectId());
         response.setProjectName(projectName);
+        response.setTeamId(notification.getTeamId());
+        response.setTeamName(teamName);
         response.setMessage(notification.getMessage());
         response.setType(notification.getType());
         response.setStatus(notification.getStatus());

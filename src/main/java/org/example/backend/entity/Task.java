@@ -13,7 +13,7 @@ import java.util.UUID;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Document(collection = "tasks")
-public class Task extends BaseEntity {
+public class    Task extends BaseEntity {
 
     @Indexed(unique = true)
     private String taskKey;
@@ -42,15 +42,17 @@ public class Task extends BaseEntity {
     private List<Attachment> attachments;
     private List<TaskRelation> relations;
     private List<SubTask> subTasks;
-}
 
-@Data
-class Attachment {
-    private String fileId;
-    private String fileName;
-    private String fileUrl;
-    private String uploadedBy;
-    private LocalDateTime uploadedAt = LocalDateTime.now();
+    private String teamId; // nullable - team assigned to this task
+
+    @Data
+    public static class Attachment {
+        private String fileId;
+        private String fileName;
+        private String fileUrl;
+        private String uploadedBy;
+        private LocalDateTime uploadedAt = LocalDateTime.now();
+    }
 }
 
 @Data

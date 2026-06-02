@@ -10,6 +10,7 @@ import java.util.List;
 public interface ITaskRepository extends MongoRepository<Task, String>, ITaskRepositoryCustom {
     List<Task> findByProjectId(String projectId);
     List<Task> findBySprintId(String sprintId);
+    List<Task> findByTeamId(String teamId);
     /** Backlog: tasks not assigned to any sprint */
     List<Task> findByProjectIdAndSprintIdIsNullOrderByBacklogPositionAsc(String projectId);
     List<Task> findBySprintIdOrderByBoardPositionAsc(String sprintId);
