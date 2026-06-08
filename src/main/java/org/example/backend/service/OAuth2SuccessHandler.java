@@ -30,9 +30,17 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String temporaryToken =
                 jwtProvider.generateAccessToken(authentication);
 
-        String targetUrl =
-                "http://localhost:5173/oauth2/redirect"
-                        + "?token=" + temporaryToken;
+        String clientUrl = "http://localhost:5173";
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("oauth2_client_url".equals(cookie.getName())) {
+                    clientUrl = cookie.getValue();
+                    break;
+                }
+            }
+        }
+
+        String targetUrl = clientUrl + "/oauth2/redirect?token=" + temporaryToken;
 
         clearAuthenticationAttributes(request);
 

@@ -15,8 +15,12 @@ public interface ITaskRepository extends MongoRepository<Task, String>, ITaskRep
     List<Task> findByProjectIdAndSprintIdIsNullOrderByBacklogPositionAsc(String projectId);
     List<Task> findBySprintIdOrderByBoardPositionAsc(String sprintId);
     List<Task> findByEpicId(String epicId);
+    List<Task> findByProjectIdIn(List<String> projectIds);
 
     long countByProjectId(String projectId);
     long countByProjectIdAndStatusId(String projectId, String statusId);
+    
+    long countByAssigneeIdAndResolutionIsNull(String assigneeId);
+    long countByAssigneeIdAndResolution(String assigneeId, org.example.backend.entity.Resolution resolution);
 }
 

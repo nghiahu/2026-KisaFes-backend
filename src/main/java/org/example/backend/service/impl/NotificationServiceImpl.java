@@ -94,7 +94,7 @@ public class NotificationServiceImpl implements INotificationService {
         Notification notification = notificationRepository.findById(id)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy lời mời"));
 
-        if (!notification.getRecipientId().equals(currentUserId)) {
+        if (notification.getRecipientId() == null || !String.valueOf(notification.getRecipientId()).equals(String.valueOf(currentUserId))) {
             throw new CustomBusinessException(ErrorCode.FORBIDDEN, "Bạn không có quyền thực hiện hành động này");
         }
 
@@ -174,7 +174,7 @@ public class NotificationServiceImpl implements INotificationService {
         Notification notification = notificationRepository.findById(id)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy lời mời"));
 
-        if (!notification.getRecipientId().equals(currentUserId)) {
+        if (notification.getRecipientId() == null || !String.valueOf(notification.getRecipientId()).equals(String.valueOf(currentUserId))) {
             throw new CustomBusinessException(ErrorCode.FORBIDDEN, "Bạn không có quyền thực hiện hành động này");
         }
 
@@ -214,7 +214,7 @@ public class NotificationServiceImpl implements INotificationService {
         Notification notification = notificationRepository.findById(id)
                 .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy thông báo"));
 
-        if (!notification.getRecipientId().equals(currentUserId)) {
+        if (notification.getRecipientId() == null || !String.valueOf(notification.getRecipientId()).equals(String.valueOf(currentUserId))) {
             throw new CustomBusinessException(ErrorCode.FORBIDDEN, "Bạn không có quyền thực hiện hành động này");
         }
 

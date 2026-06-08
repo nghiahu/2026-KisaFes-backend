@@ -103,11 +103,20 @@ public class TeamServiceImpl implements ITeamService {
 
     @Override
     public List<TeamResponse> searchTeams(String keyword) {
-        List<Team> teams;
+        org.example.backend.security.principle.MyUserDetails userDetails = (org.example.backend.security.principle.MyUserDetails) org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = userDetails.getUserId();
+
+        List<String> userTeamIds = teamMemberRepository.findByUserId(userId).stream()
+                .map(TeamMember::getTeamId)
+                .collect(Collectors.toList());
+
+        List<Team> teams = new ArrayList<>();
         if (keyword == null || keyword.trim().isEmpty()) {
-            teams = teamRepository.findAll();
+            teamRepository.findAllById(userTeamIds).forEach(teams::add);
         } else {
-            teams = teamRepository.findByNameContainingIgnoreCase(keyword.trim());
+            teams = teamRepository.findByNameContainingIgnoreCase(keyword.trim()).stream()
+                    .filter(t -> userTeamIds.contains(t.getId()))
+                    .collect(Collectors.toList());
         }
         return teams.stream().map(this::buildTeamResponse).collect(Collectors.toList());
     }

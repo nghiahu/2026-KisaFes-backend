@@ -13,6 +13,7 @@ public interface ITaskActivityRepository extends MongoRepository<TaskActivity, S
     List<TaskActivity> findByTaskId(String taskId);
     List<TaskActivity> findByProjectId(String projectId);
     List<TaskActivity> findByProjectIdAndCreatedAtBetween(String projectId, LocalDateTime from, LocalDateTime to);
+    List<TaskActivity> findByProjectIdIn(List<String> projectIds);
     List<TaskActivity> findBySprintId(String sprintId);
     List<TaskActivity> findByUserIdIn(List<String> userIds);
     List<TaskActivity> findByUserIdInAndProjectIdIn(List<String> userIds, List<String> projectIds);

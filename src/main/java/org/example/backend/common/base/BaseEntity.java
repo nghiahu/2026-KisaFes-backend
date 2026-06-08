@@ -8,6 +8,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 
 import java.time.LocalDateTime;
 
+import org.springframework.data.mongodb.core.index.Indexed;
+
 @Getter
 @Setter
 public abstract class BaseEntity {
@@ -15,6 +17,7 @@ public abstract class BaseEntity {
     private String id;
 
     @CreatedDate
+    @Indexed
     private LocalDateTime createdAt;
 
     @LastModifiedDate

@@ -54,6 +54,9 @@ public class AuthController extends BaseController {
 
     @PostMapping("send-reset-password")
     public ResponseEntity<ResponseWrapper<Void>> resetPass(@Valid @RequestBody SendOtpRequest request) {
+        if (!authServiceImpl.checkEmail(request.getEmail())) {
+            throw new org.example.backend.common.exception.CustomBusinessException(org.example.backend.common.constants.ErrorCode.USER_NOT_FOUND);
+        }
         otpServiceImpl.sendResetPasswordMail(request.getEmail());
         return success(null, "Gửi OTP đổi mật khẩu thành công");
     }

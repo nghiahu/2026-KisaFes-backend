@@ -13,7 +13,7 @@ import java.util.UUID;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Document(collection = "tasks")
-public class    Task extends BaseEntity {
+public class Task extends BaseEntity {
 
     @Indexed(unique = true)
     private String taskKey;

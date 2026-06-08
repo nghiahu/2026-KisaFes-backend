@@ -27,7 +27,7 @@ public class MyUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String identifier) throws UsernameNotFoundException {
-        String cacheKey = "auth:user:" + identifier;
+        String cacheKey = "auth:user:v2:" + identifier;
 
         // 1. Kiểm tra Cache từ Redis
         Object cachedUser = redisService.getObject(cacheKey);
@@ -49,7 +49,7 @@ public class MyUserDetailsService implements UserDetailsService {
                 }
                 if (role.getPermissions() != null) {
                     for (SystemPermission sp : role.getPermissions()) {
-                        authorities.add(new SimpleGrantedAuthority("SYSTEM_" + sp.name()));
+                        authorities.add(new SimpleGrantedAuthority(sp.name()));
                     }
                 }
             }
