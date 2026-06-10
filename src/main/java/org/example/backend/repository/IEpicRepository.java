@@ -10,4 +10,5 @@ import java.util.List;
 public interface IEpicRepository extends MongoRepository<Epic, String> {
     List<Epic> findByProjectId(String projectId);
     void deleteAllByProjectId(String projectId);
+    long countByProjectId(String projectId);
 }

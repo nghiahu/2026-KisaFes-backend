@@ -8,10 +8,13 @@ import org.example.backend.entity.Project;
 
 import java.util.List;
 
+import org.example.backend.dto.response.RecentActivityDto;
+
 public interface IProjectService {
     ProjectResponse createProject(AddProjectRequest addProjectRequest);
     List<ProjectResponse> getAllProjects();
-    ProjectResponse getProjectById(String id);
+    ProjectResponse getProjectById(String projectId);
+    List<RecentActivityDto> getRecentActivities(String projectId);
     void deleteProject(String projectId);
     void inviteMember(String projectId, InviteMemberRequest request);
     void removeMember(String projectId, String userId);

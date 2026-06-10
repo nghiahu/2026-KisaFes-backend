@@ -33,6 +33,7 @@ public class ProjectServiceImpl implements IProjectService {
     private final ITaskRepository taskRepository;
     private final ITeamMemberRepository teamMemberRepository;
     private final ITeamRepository teamRepository;
+    private final ITaskActivityRepository taskActivityRepository;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     private void broadcastProjectEvent(String projectId, String type) {
@@ -216,6 +217,51 @@ public class ProjectServiceImpl implements IProjectService {
 
         populateProjectMetrics(response, project);
         return response;
+    }
+
+    @Override
+    public List<org.example.backend.dto.response.RecentActivityDto> getRecentActivities(String projectId) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new CustomBusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Dự án không tồn tại"));
+
+        List<TaskActivity> activities = taskActivityRepository.findTop10ByProjectIdOrderByCreatedAtDesc(projectId);
+
+        List<String> taskIds = activities.stream().map(TaskActivity::getTaskId).distinct().toList();
+        List<String> userIds = activities.stream().map(TaskActivity::getUserId).distinct().toList();
+
+        List<Task> tasks = taskRepository.findAllById(taskIds);
+        List<User> users = userRepository.findAllById(userIds);
+
+        java.util.Map<String, Task> taskMap = tasks.stream().collect(Collectors.toMap(Task::getId, t -> t));
+        java.util.Map<String, User> userMap = users.stream().collect(Collectors.toMap(User::getId, u -> u));
+
+        return activities.stream().map(a -> {
+            org.example.backend.dto.response.RecentActivityDto dto = new org.example.backend.dto.response.RecentActivityDto();
+            dto.setId(a.getId());
+            dto.setActionType(a.getActionType());
+            dto.setField(a.getField());
+            dto.setOldValue(a.getOldValue());
+            dto.setNewValue(a.getNewValue());
+            dto.setCreatedAt(a.getCreatedAt());
+
+            User user = userMap.get(a.getUserId());
+            if (user != null) {
+                dto.setUserId(user.getId());
+                dto.setUserName(user.getFullName());
+                dto.setUserAvatar(user.getAvatar());
+            }
+
+            Task task = taskMap.get(a.getTaskId());
+            if (task != null) {
+                dto.setTaskId(task.getId());
+                dto.setTaskKey(task.getTaskKey() != null ? task.getTaskKey() : task.getId());
+                dto.setTaskTitle(task.getTitle());
+                dto.setTaskType(task.getType() != null ? task.getType().name() : null);
+                dto.setTaskStatusId(task.getStatusId());
+            }
+
+            return dto;
+        }).collect(Collectors.toList());
     }
 
     @Override

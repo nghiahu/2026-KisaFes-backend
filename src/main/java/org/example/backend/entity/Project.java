@@ -31,6 +31,9 @@ public class Project extends BaseEntity {
     private String description;
     private String categoryId;
 
+    /** Sequence counter for generating unique Task Keys (e.g., PROJ-1, PROJ-2) */
+    private Long taskSequence = 0L;
+
     /** Phương pháp quản lý: SCRUM hoặc KANBAN. Mặc định KANBAN. */
     private Methodology methodology = Methodology.KANBAN;
 

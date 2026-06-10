@@ -33,6 +33,8 @@ import org.example.backend.dto.request.UpdateProjectRoleRequest;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.example.backend.dto.request.UpdateProjectNameRequest;
 
+import org.example.backend.dto.response.RecentActivityDto;
+
 @RestController
 @RequestMapping("/api/v1/projects")
 @RequiredArgsConstructor
@@ -73,6 +75,12 @@ public class ProjectController extends BaseController {
             @PathVariable String id,
             @Valid @RequestBody org.example.backend.dto.request.UpdateProjectInfoRequest request) {
         return success(projectService.updateProjectInfo(id, request), "Đã cập nhật thông tin dự án");
+    }
+
+    @GetMapping("/{projectId}/activities/recent")
+    public ResponseEntity<ResponseWrapper<List<RecentActivityDto>>> getRecentActivities(@PathVariable String projectId) {
+        List<RecentActivityDto> response = projectService.getRecentActivities(projectId);
+        return success(response);
     }
 
     @PostMapping("/{id}/teams")

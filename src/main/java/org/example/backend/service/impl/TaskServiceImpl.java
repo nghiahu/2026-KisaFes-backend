@@ -57,6 +57,7 @@ public class TaskServiceImpl implements ITaskService {
     private final IProjectService projectService;
     private final ApplicationEventPublisher eventPublisher;
     private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
+    private final org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
     private void broadcastTaskEvent(String projectId, String type, Object data) {
         try {
@@ -180,8 +181,41 @@ public class TaskServiceImpl implements ITaskService {
             throw new CustomBusinessException(ErrorCode.PERMISSION_DENIED, "Bạn không có quyền tạo công việc trong dự án này");
         }
 
-        long taskCount = taskRepository.countByProjectId(request.getProjectId());
-        String taskKey = project.getCode() + "-" + (taskCount + 1);
+        // --- INIT TASK SEQUENCE IF NEEDED ---
+        if (project.getTaskSequence() == null || project.getTaskSequence() == 0L) {
+            long maxSeq = 0;
+            Task lastTask = taskRepository.findFirstByProjectIdOrderByCreatedAtDesc(request.getProjectId());
+            if (lastTask != null && lastTask.getTaskKey() != null) {
+                String[] parts = lastTask.getTaskKey().split("-");
+                if (parts.length > 1) {
+                    try {
+                        maxSeq = Long.parseLong(parts[parts.length - 1]);
+                    } catch (Exception e) {}
+                }
+            }
+            if (maxSeq == 0) {
+                maxSeq = taskRepository.countByProjectId(request.getProjectId());
+            }
+
+            org.springframework.data.mongodb.core.query.Query initQuery = new org.springframework.data.mongodb.core.query.Query(
+                    org.springframework.data.mongodb.core.query.Criteria.where("_id").is(request.getProjectId())
+                            .andOperator(new org.springframework.data.mongodb.core.query.Criteria().orOperator(
+                                    org.springframework.data.mongodb.core.query.Criteria.where("taskSequence").exists(false),
+                                    org.springframework.data.mongodb.core.query.Criteria.where("taskSequence").is(0L)
+                            )));
+            org.springframework.data.mongodb.core.query.Update initUpdate = new org.springframework.data.mongodb.core.query.Update().set("taskSequence", maxSeq);
+            mongoTemplate.updateFirst(initQuery, initUpdate, Project.class);
+        }
+
+        // --- ATOMICALLY INCREMENT AND GET NEW SEQUENCE ---
+        org.springframework.data.mongodb.core.query.Query query = new org.springframework.data.mongodb.core.query.Query(
+                org.springframework.data.mongodb.core.query.Criteria.where("_id").is(request.getProjectId()));
+        org.springframework.data.mongodb.core.query.Update update = new org.springframework.data.mongodb.core.query.Update().inc("taskSequence", 1);
+        org.springframework.data.mongodb.core.FindAndModifyOptions options = new org.springframework.data.mongodb.core.FindAndModifyOptions().returnNew(true);
+        Project updatedProject = mongoTemplate.findAndModify(query, update, options, Project.class);
+
+        long sequence = updatedProject != null && updatedProject.getTaskSequence() != null ? updatedProject.getTaskSequence() : 1L;
+        String taskKey = project.getCode() + "-" + sequence;
 
         Task task = new Task();
         task.setTaskKey(taskKey);

@@ -17,5 +17,6 @@ public interface ITaskActivityRepository extends MongoRepository<TaskActivity, S
     List<TaskActivity> findBySprintId(String sprintId);
     List<TaskActivity> findByUserIdIn(List<String> userIds);
     List<TaskActivity> findByUserIdInAndProjectIdIn(List<String> userIds, List<String> projectIds);
+    List<TaskActivity> findTop10ByProjectIdOrderByCreatedAtDesc(String projectId);
 
 }
